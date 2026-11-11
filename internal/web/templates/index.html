@@ -1,0 +1,9 @@
+{{define "content"}}
+<section class="tarjeta">
+  <h1>Playlist compartida, cada quien en su app</h1>
+  <p>Aporta canciones al pool del grupo. Cada persona tiene su ventana de 10 canciones, por turnos, y la escucha en la plataforma que ya usa.</p>
+  <p class="nota">En construcción: fase F1 (núcleo universal).</p>
+  <button hx-get="/healthz" hx-target="#estado" hx-swap="innerHTML">Comprobar servidor</button>
+  <span id="estado" aria-live="polite"></span>
+</section>
+{{end}}

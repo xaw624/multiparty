@@ -109,7 +109,7 @@ Plan: **solo banners pequeños en la parte inferior**, por ejemplo con Google Ad
 | **Grupo privado** (como máximo 5 usuarios de Spotify) | Nivel 1 | Nivel 2 | Nivel 3 | **No** |
 | **Público** | **Nivel 3** (solo links) | Nivel 2 | Nivel 3 | Sí |
 
-**Decisión pendiente:** con qué modo se empieza. Recomendación: **empezar como grupo privado sin anuncios**, validar que el concepto se usa y, si crece, lanzar la versión pública con Spotify en nivel 3.
+**Decisión (2026-11-11): se empieza como grupo privado, sin anuncios.** Primero se valida que el concepto se usa; si crece, se lanza la versión pública con Spotify en nivel 3 (fase F5).
 
 Requisitos para mostrar anuncios: política de privacidad, aviso de consentimiento de cookies (obligatorio para usuarios de la UE y el Reino Unido), un dominio propio y suficiente contenido para que AdSense apruebe el sitio.
 
@@ -121,7 +121,7 @@ Requisitos para mostrar anuncios: política de privacidad, aviso de consentimien
 │ Pool · Mi ventana    │◄────────►│  App web (rutas + plantillas)             │
 │ Pegar link · Importar│           │  ├─ Servicio de orden (turnos, cursores) │
 │ Botón "ya la escuché"│           │  ├─ Emparejador (ISRC → Odesli → búsqueda)│
-│ Banner inferior      │           │  └─ Adaptadores: spotify · youtube · links│
+│ (banner solo en F5)  │           │  └─ Adaptadores: spotify · youtube · links│
 └──────────────────────┘           │  Tareas en segundo plano                  │
                                    │  ├─ Detectar escuchas (Spotify, ~5 min)  │
                                    │  ├─ Resolver los próximos 5 de cada cola │
@@ -155,29 +155,32 @@ revision        (cancion_id, plataforma, candidatos_json, estado, resuelto_por)
 
 ## 10. Stack
 
-### Recomendado: Python
+### Elegido (2026-11-11): Go + HTMX
 
 | Capa | Elección | Por qué |
 |---|---|---|
-| Backend | **FastAPI** | Liviano y asíncrono, y coincide con el borrador original |
-| Plantillas y UI | **Jinja2 + HTMX** + CSS simple (Pico.css) | Se renderiza en el servidor: sin compilar el frontend, es rápido en móvil y AdSense lo indexa bien |
-| Base de datos | **SQLite** + SQLModel/SQLAlchemy + **Alembic** | Basta para miles de usuarios; respaldarla es copiar un archivo |
-| OAuth | **Authlib** | Spotify y Google con el mismo código |
-| Clientes HTTP | **httpx**, sin spotipy | Las APIs de Spotify cambiaron en 2026; un cliente propio y delgado se rompe menos |
-| Tareas | **APScheduler** dentro del mismo proceso | No requiere Redis ni Celery para esta escala |
-| Cifrado de tokens | `cryptography` (Fernet), con la clave en una variable de entorno | |
-| Despliegue | **Docker Compose + Caddy** (HTTPS automático) en Oracle Cloud Free Tier | Costo cero |
-| Pruebas | pytest + respx (para simular las APIs) | |
+| Lenguaje | **Go 1.26+** | Un solo binario, muy poca memoria; compila para ARM (Oracle Ampere) sin esfuerzo |
+| HTTP | **`net/http`** de la biblioteca estándar | Desde Go 1.22 tiene rutas con método y parámetros; no hace falta framework |
+| Plantillas | **`html/template` + `embed`** | Sin paso de compilación y con escapado automático. Se puede migrar a `templ` si las vistas crecen |
+| Interactividad | **HTMX 2** + CSS propio | Sin compilar el frontend; rápido en móvil |
+| Base de datos | **SQLite** con `modernc.org/sqlite` | Go puro, sin CGO: compilación cruzada trivial |
+| Migraciones | Archivos SQL embebidos con un ejecutor propio | Cero dependencias; se puede cambiar a `goose` si hace falta |
+| Consultas | `database/sql` directo | Se puede adoptar `sqlc` si las consultas crecen |
+| OAuth | **`golang.org/x/oauth2`** | Ya trae los endpoints de Spotify y Google |
+| Clientes de APIs | `net/http` propio, delgado | Las APIs de Spotify cambiaron en 2026; un cliente propio se rompe menos |
+| Tareas | Goroutines con `time.Ticker` | No requiere colas ni procesos externos |
+| Cifrado de tokens | AES-GCM (`crypto/aes`), con la clave en una variable de entorno | |
+| Configuración | Variables de entorno | |
+| Pruebas | `go test` + `httptest` | |
+| Despliegue | Binario + systemd + **Caddy** (HTTPS automático) en Oracle Cloud Free Tier | Costo cero |
 | Móvil | **PWA** instalable | Sin tiendas de apps ni costos de publicación |
 
-### Alternativas
+### Alternativas descartadas
 
-| Stack | A favor | En contra |
-|---|---|---|
-| **TypeScript: SvelteKit o Next.js + Drizzle + SQLite + Auth.js** | Un solo lenguaje; interfaz más rica; Auth.js ya trae los proveedores Spotify y Google | Más piezas que mantener; Node consume más memoria |
-| **Go + templ + HTMX + SQLite** | Un solo binario; muy poca memoria | Menos librerías para OAuth y música; desarrollo más lento al principio |
-
-Se recomienda **Python + FastAPI + HTMX**: es el camino más corto al MVP, el trabajo del worker (emparejar, reintentar, rotar) es natural en Python y el servidor gratuito alcanza de sobra.
+| Stack | Por qué no |
+|---|---|
+| Python + FastAPI + HTMX | Más fácil al inicio, pero más memoria y más dependencias que mantener |
+| TypeScript: SvelteKit o Next.js | Interfaz más rica, pero más piezas y más consumo de memoria de lo que el proyecto necesita |
 
 ## 11. Fases
 
@@ -195,7 +198,8 @@ La F1 ya sirve por sí sola: funciona con cualquier plataforma sin conectar ning
 
 ## 12. Decisiones pendientes
 
-- [ ] ¿Se empieza como grupo privado (sin anuncios) o como versión pública?
+- [x] ¿Grupo privado o versión pública? → **Grupo privado, sin anuncios.**
+- [x] Stack → **Go + HTMX + SQLite.**
 - [ ] ¿Las canciones importadas van al final de la fila? (propuesta de la sección 3)
 - [ ] ¿Qué pasa al llegar al final del pool?
 - [ ] Nombre definitivo y dominio.
