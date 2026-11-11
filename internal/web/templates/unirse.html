@@ -1,0 +1,19 @@
+{{define "title"}}Unirse a {{.Grupo.Nombre}} · Multiparty{{end}}
+
+{{define "content"}}
+<section class="tarjeta">
+  <h1>Te invitaron a «{{.Grupo.Nombre}}»</h1>
+  <p>Aporta canciones al pool del grupo y escucha las de los demás, por turnos, en la app que ya usas.</p>
+  {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+  <form method="post" action="/g/{{.Grupo.Codigo}}/unirse" class="formulario">
+    {{if .Nombre}}
+    <p class="nota">Te unirás como {{.Nombre}}.</p>
+    {{else}}
+    <label>Tu nombre
+      <input name="tu_nombre" required maxlength="40" autocomplete="nickname">
+    </label>
+    {{end}}
+    <button type="submit">Unirme</button>
+  </form>
+</section>
+{{end}}

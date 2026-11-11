@@ -13,6 +13,7 @@ import (
 
 	"github.com/xaw624/multiparty/internal/config"
 	"github.com/xaw624/multiparty/internal/db"
+	"github.com/xaw624/multiparty/internal/resolver"
 	"github.com/xaw624/multiparty/internal/web"
 )
 
@@ -40,7 +41,11 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	app, err := web.New(database, logger)
+	if cfg.SecretoGenerado {
+		logger.Warn("MULTIPARTY_SECRET no está definido: se usa uno aleatorio y las sesiones se pierden al reiniciar")
+	}
+
+	app, err := web.New(database, logger, resolver.New(cfg.Pais), cfg.Secreto)
 	if err != nil {
 		return err
 	}

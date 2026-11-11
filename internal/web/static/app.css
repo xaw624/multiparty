@@ -4,7 +4,10 @@
   --texto: #1d1d1f;
   --tenue: #6b6b70;
   --acento: #5b4bdb;
+  --acento-suave: #ece9fd;
   --borde: #e2e0da;
+  --error: #b3261e;
+  --ok: #1b7f3b;
   color-scheme: light dark;
 }
 
@@ -15,7 +18,10 @@
     --texto: #ececef;
     --tenue: #9d9da5;
     --acento: #9a8cff;
+    --acento-suave: #2a2640;
     --borde: #2e2e34;
+    --error: #ff8a80;
+    --ok: #7bd88f;
   }
 }
 
@@ -28,6 +34,8 @@ body {
   color: var(--texto);
   line-height: 1.5;
 }
+
+a { color: var(--acento); }
 
 .barra {
   padding: 12px 16px;
@@ -44,8 +52,10 @@ body {
 main {
   max-width: 640px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 24px 16px 48px;
 }
+
+.pila { display: flex; flex-direction: column; gap: 16px; }
 
 .tarjeta {
   background: var(--superficie);
@@ -54,18 +64,77 @@ main {
   padding: 20px;
 }
 
-h1 { font-size: 1.4rem; margin-top: 0; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+h2 { font-size: 1.05rem; margin: 0 0 12px; }
 
 .nota { color: var(--tenue); font-size: 0.9rem; }
+.error { color: var(--error); margin: 12px 0 0; }
+.ok { color: var(--ok); margin: 12px 0 0; }
+
+input, select, button { font: inherit; }
+
+input, select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+}
 
 button {
-  font: inherit;
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 8px;
   border: 0;
   background: var(--acento);
   color: #fff;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-#estado { margin-left: 8px; color: var(--tenue); }
+button:disabled { opacity: 0.6; cursor: progress; }
+
+button.secundario {
+  background: var(--acento-suave);
+  color: var(--acento);
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.formulario { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.formulario label, .campo { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: 0.9rem; }
+.campo { margin-top: 12px; }
+
+.fila-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.fila-form input { flex: 1 1 200px; min-width: 0; }
+.fila-form button { flex: 1 0 auto; }
+
+.lista { margin: 0; padding-left: 20px; }
+
+.canciones { list-style: none; margin: 0; padding: 0; }
+/* En pantallas angostas el botón baja debajo de la canción. */
+.canciones li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--borde);
+}
+.canciones li:first-child { border-top: 0; }
+.canciones.tenue { opacity: 0.7; }
+
+.cancion { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 220px; }
+.canciones li form { margin-left: auto; }
+.cancion img, .portada-vacia {
+  width: 48px; height: 48px; flex: none;
+  border-radius: 6px; object-fit: cover;
+  background: var(--acento-suave);
+}
+.info { display: flex; flex-direction: column; min-width: 0; }
+.info a, .info .nota { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info a { font-weight: 600; text-decoration: none; }
+.info a:hover { text-decoration: underline; }
+
+.miembros { margin: 0; padding-left: 20px; }

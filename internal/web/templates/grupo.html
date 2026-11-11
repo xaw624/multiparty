@@ -1,0 +1,103 @@
+{{define "title"}}{{.Grupo.Nombre}} · Multiparty{{end}}
+
+{{define "content"}}{{template "grupo" .}}{{end}}
+
+{{define "grupo"}}
+<div id="grupo" class="pila">
+  <section class="tarjeta">
+    <h1>{{.Grupo.Nombre}}</h1>
+    <p class="nota">Hola, {{.Yo.Nombre}} · {{.TotalPool}} {{if eq .TotalPool 1}}canción{{else}}canciones{{end}} en el pool</p>
+    <form class="fila-form" method="post" action="/g/{{.Grupo.Codigo}}/aportes"
+          hx-post="/g/{{.Grupo.Codigo}}/aportes" hx-target="#grupo" hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <input type="url" name="enlace" required value="{{.Enlace}}"
+             placeholder="Pega el link de una canción"
+             aria-label="Link de una canción de cualquier plataforma">
+      <button type="submit">Agregar</button>
+    </form>
+    {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+    {{with .Mensaje}}<p class="ok" role="status">{{.}}</p>{{end}}
+  </section>
+
+  <section class="tarjeta">
+    <h2>Tu ventana</h2>
+    {{if .Ventana}}
+    <ol class="canciones">
+      {{range .Ventana}}
+      <li>
+        {{template "cancion" .}}
+        <form method="post" action="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}"
+              hx-post="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}" hx-target="#grupo" hx-swap="outerHTML">
+          <button type="submit" class="secundario" aria-label="Ya escuché «{{.Titulo}}»">Ya la escuché</button>
+        </form>
+      </li>
+      {{end}}
+    </ol>
+    {{else}}
+    <p class="nota">No tienes canciones por escuchar. Agrega una o espera a que alguien aporte.</p>
+    {{end}}
+  </section>
+
+  {{if .Despues}}
+  <section class="tarjeta">
+    <h2>Después</h2>
+    <ol class="canciones tenue">
+      {{range .Despues}}<li>{{template "cancion" .}}</li>{{end}}
+    </ol>
+  </section>
+  {{end}}
+
+  {{if .MisPendientes}}
+  <section class="tarjeta">
+    <h2>Tus aportes en cola</h2>
+    <p class="nota">Puedes quitarlos mientras no hayan entrado a la ventana de nadie.</p>
+    <ul class="canciones">
+      {{range .MisPendientes}}
+      <li>
+        {{template "cancion" .}}
+        <form method="post" action="/g/{{$.Grupo.Codigo}}/aportes/{{.AporteID}}/eliminar"
+              hx-post="/g/{{$.Grupo.Codigo}}/aportes/{{.AporteID}}/eliminar" hx-target="#grupo" hx-swap="outerHTML"
+              hx-confirm="¿Quitar «{{.Titulo}}» del pool?">
+          <button type="submit" class="secundario" aria-label="Quitar «{{.Titulo}}»">Quitar</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  <section class="tarjeta">
+    <h2>Grupo</h2>
+    <ul class="miembros">
+      {{range .Miembros}}
+      <li>{{.Nombre}}{{if .EsYo}} (tú){{end}}
+        <span class="nota">· {{.Pendientes}} en cola · {{.Escuchadas}} escuchadas</span></li>
+      {{end}}
+    </ul>
+    <label class="campo">Link de invitación
+      <input type="text" readonly value="{{.InvitarURL}}" onfocus="this.select()">
+    </label>
+    <form method="post" action="/g/{{.Grupo.Codigo}}/preferencia"
+          hx-post="/g/{{.Grupo.Codigo}}/preferencia" hx-target="#grupo" hx-swap="outerHTML" hx-trigger="change">
+      <label class="campo">Abrir las canciones en
+        <select name="plataforma">
+          {{range .Plataformas}}
+          <option value="{{.Clave}}"{{if eq .Clave $.Yo.PlataformaLinks}} selected{{end}}>{{.Nombre}}</option>
+          {{end}}
+        </select>
+      </label>
+      <noscript><button type="submit">Guardar</button></noscript>
+    </form>
+  </section>
+</div>
+{{end}}
+
+{{define "cancion"}}
+<div class="cancion">
+  {{if .Portada}}<img src="{{.Portada}}" alt="" width="48" height="48" loading="lazy">{{else}}<div class="portada-vacia" aria-hidden="true"></div>{{end}}
+  <div class="info">
+    <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Titulo}}</a>
+    <span class="nota">{{.Artista}} · {{if .EsMio}}tuya{{else}}de {{.Por}}{{end}}</span>
+  </div>
+</div>
+{{end}}

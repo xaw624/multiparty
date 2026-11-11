@@ -41,6 +41,14 @@ Ventana de B:  [A1 … ]  cursor 0       (cada quien avanza a su ritmo)
 4. Las canciones nuevas solo se insertan **después de la ventana más avanzada**. Lo que ya está dentro de alguna ventana ya se escribió en una plataforma y no se mueve.
 5. **Fin del pool:** *(pendiente)* volver a empezar, reordenar o detenerse.
 6. **Borrar:** solo quien aportó la canción, y solo si no ha entrado en ninguna ventana.
+7. **Sin duplicados:** una canción no se puede aportar dos veces al mismo grupo.
+8. **Escuchar fuera de orden:** se puede marcar cualquier canción de la propia ventana; el cursor solo avanza cuando no quedan huecos antes.
+
+### Implementación en F1
+
+- **Sin login:** cada persona escribe su nombre y queda identificada por una cookie firmada en su navegador. El login con Spotify o Google llega en F2/F3.
+- **Grupos privados:** se entra con un link de invitación que contiene un código aleatorio.
+- **Plataforma de los links:** cada miembro elige en qué plataforma se abren sus links. Si la canción no tiene link en esa plataforma, se usa la página de song.link.
 
 ## 4. Niveles por plataforma
 
@@ -50,7 +58,8 @@ Ventana de B:  [A1 … ]  cursor 0       (cada quien avanza a su ritmo)
 | **2. Espejo con botón** | YouTube Music | Playlist en su app | Botón en la web (la API no da acceso al historial) | Pegar un link, importar |
 | **3. Solo links** | Amazon Music, Deezer, Tidal, SoundCloud, Apple Music y cualquier otra | Lista de 10 en la web; cada canción es un link que abre su app | Botón en la web | Pegar un link de cualquier plataforma |
 
-- El nivel 3 funciona **sin ninguna API de plataforma**: solo con Odesli/song.link. Por eso es la base del MVP.
+- El nivel 3 funciona **sin cuentas ni claves**: solo con fuentes públicas y la página de song.link. Por eso es la base del MVP.
+- **Links aceptados en F1:** Spotify, YouTube, YouTube Music, Apple Music y Deezer. Para abrir, cualquier plataforma (vía song.link).
 - **Apple Music** podría subir al nivel 2, pero requiere una cuenta Apple Developer (99 USD al año), que pagaría quien desarrolla la app, no los usuarios.
 - **YouTube:** la política exige que las escrituras en la cuenta del usuario sean "claramente iniciadas por el usuario" (III.C.2) y que el usuario consienta antes de ejecutarlas (III.E.3.4). Por eso, en YouTube la ventana avanza **con el botón** y no con un temporizador.
 
@@ -59,7 +68,11 @@ Ventana de B:  [A1 … ]  cursor 0       (cada quien avanza a su ritmo)
 Para identificar una canción se intenta, en este orden:
 
 1. **ISRC.** Spotify lo entrega en `external_ids`. Se anunció su eliminación en febrero de 2026, pero se revirtió en marzo.
-2. **Odesli (song.link).** Convierte un link de cualquier plataforma en los de las demás **sin gastar cuota de YouTube**.
+2. **Resolvedor propio** (reemplaza a la API de Odesli, retirada en julio de 2026):
+   - Datos del link pegado: página pública de Spotify (etiquetas `og:`), oEmbed de YouTube, iTunes o Deezer.
+   - Busca la misma canción en **Deezer** (que da el ISRC) y en **Apple Music** por artista, título y duración (±5 s).
+   - Siempre agrega la página de **song.link**, que abre la canción en cualquier plataforma.
+   - Si falla una fuente secundaria, la canción se agrega igual con menos links.
 3. **Búsqueda.**
    - Spotify: `isrc:XXXX`, o artista y título.
    - YouTube: preferir canales "Artista - Topic" y comparar la duración (±3 s).
@@ -83,15 +96,24 @@ Para identificar una canción se intenta, en este orden:
 |---|---|
 | `playlistItems.list`, `videos.list` | 1 |
 | `playlistItems.insert`, `update`, `delete`, `playlists.insert` | 50 |
-| `search.list` | 100 (se evita: se usa Odesli) |
+| `search.list` | 100 (solo para canciones aportadas desde otra plataforma) |
 
 - Cada rotación de ventana cuesta 1 borrado + 1 inserción = **100 unidades**, así que caben unas **100 rotaciones al día** en total.
 - **OAuth:** en modo "Testing" los refresh tokens caducan a los **7 días**. Hay que publicar la app en "Production". Sin verificar, el límite es de 100 usuarios con pantalla de advertencia; para un uso público hay que verificar el scope sensible `youtube`, lo cual es gratuito.
 - **Datos:** los metadatos obtenidos de YouTube se refrescan o borran cada **30 días**. Si un usuario revoca el acceso, sus datos se borran en **7 días** o menos.
 
 ### Odesli / song.link
-- Sin clave: unas **10 peticiones por minuto**. Con clave el límite es mayor; se solicita por correo.
-- Para **uso comercial** (con anuncios) hay que revisar sus términos y pedir una clave antes de lanzar.
+- ⚠️ **La API pública sin clave se retiró el 31 de julio de 2026**: ahora responde `401 PUBLIC_API_ACCESS_DEPRECATED` (comprobado el 2026-11-11). No está claro si todavía se conceden claves.
+- La **página** de song.link sigue funcionando sin API: `https://song.link/<link original>` redirige a la página de la canción. Sirve como link universal del nivel 3.
+
+### Fuentes gratuitas sin clave (comprobadas el 2026-11-11)
+
+| Fuente | Qué devuelve |
+|---|---|
+| oEmbed de YouTube | Título del video y canal |
+| oEmbed de Spotify | Título de la canción y portada (sin artista) |
+| API de búsqueda/lookup de iTunes | Título, artista, duración, portada, link de Apple Music |
+| API pública de Deezer | Título, artista, duración, **ISRC**; búsqueda por texto y por ISRC |
 
 ## 7. Monetización y su conflicto con Spotify
 
@@ -120,7 +142,7 @@ Requisitos para mostrar anuncios: política de privacidad, aviso de consentimien
 ┌──────────────────────┐   HTTPS   ┌─────────────────────────────────────────┐
 │ Pool · Mi ventana    │◄────────►│  App web (rutas + plantillas)             │
 │ Pegar link · Importar│           │  ├─ Servicio de orden (turnos, cursores) │
-│ Botón "ya la escuché"│           │  ├─ Emparejador (ISRC → Odesli → búsqueda)│
+│ Botón "ya la escuché"│           │  ├─ Resolvedor (Spotify·YT·iTunes·Deezer)│
 │ (banner solo en F5)  │           │  └─ Adaptadores: spotify · youtube · links│
 └──────────────────────┘           │  Tareas en segundo plano                  │
                                    │  ├─ Detectar escuchas (Spotify, ~5 min)  │
@@ -143,7 +165,7 @@ cuentas         (id, usuario_id, plataforma, id_externo, access_token_cifrado,
                  refresh_token_cifrado, expira_en, scopes)
 canciones       (id, isrc NULL UNIQUE, titulo, artista, duracion_ms, portada_url)
 mapeos          (cancion_id, plataforma, track_id, url,
-                 confianza: isrc|odesli|busqueda|manual, verificado_en)
+                 confianza: directo|isrc|busqueda|manual, verificado_en)
                  PK (cancion_id, plataforma)
 aportes         (id, grupo_id, cancion_id, usuario_id, origen: suelta|importada,
                  estado: pendiente|ordenado|eliminado, agregado_en)
@@ -186,8 +208,8 @@ revision        (cancion_id, plataforma, candidatos_json, estado, resuelto_por)
 
 | Fase | Entregable | APIs necesarias |
 |---|---|---|
-| **F0** | Repo, plan y esqueleto del proyecto | — |
-| **F1. Núcleo universal** | Grupos con invitación, pegar link (Odesli), orden intercalado, ventana de 10 por persona en la web con botón "ya la escuché" (nivel 3 para **todas** las plataformas) | Solo Odesli |
+| **F0** ✅ | Repo, plan y esqueleto del proyecto | — |
+| **F1. Núcleo universal** ✅ | Grupos con invitación, pegar link (resolvedor propio), orden intercalado, ventana de 10 por persona en la web con botón "ya la escuché" (nivel 3 para **todas** las plataformas) | Fuentes públicas sin clave |
 | **F2. YouTube Music** | OAuth de Google, playlist espejo, rotación con botón, importar desde playlists | YouTube Data API |
 | **F3. Spotify** | OAuth, playlist espejo, detección automática de escuchas, búsqueda e importación | Spotify Web API |
 | **F4. Revisión manual** | Pantalla para elegir entre candidatos cuando la coincidencia no es confiable | — |
@@ -211,6 +233,7 @@ La F1 ya sirve por sí sola: funciona con cualquier plataforma sin conectar ning
 |---|---|
 | Spotify o YouTube cambian sus condiciones (ya pasó en 2024 y 2026) | Adaptadores aislados; el nivel 3 siempre funciona como respaldo |
 | Emparejamientos erróneos en YouTube (versiones en vivo, remixes) | Canales "Topic", comparación de duración y revisión manual |
-| Cuota de YouTube | Odesli en lugar de `search.list`; rotaciones de 100 unidades; resolución perezosa |
-| Odesli limita las peticiones o cambia sus términos | Caché de mapeos; pedir una clave; búsqueda directa como respaldo |
+| Cuota de YouTube | Rotaciones de 100 unidades; resolución perezosa; las canciones aportadas desde YouTube ya traen su id |
+| Un servicio externo desaparece (ya pasó con la API de Odesli en julio de 2026) | Resolvedor propio con varias fuentes; la página de song.link como respaldo universal |
+| Sin Odesli, emparejar con YouTube cuesta una búsqueda (100 unidades) | Unas 50 canciones nuevas al día en YouTube (búsqueda + rotación); suficiente para un grupo de amigos |
 | Google rechaza la verificación o AdSense no aprueba el sitio | Empezar como grupo privado; agregar contenido propio (estadísticas del grupo, historial) |

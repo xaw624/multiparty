@@ -1,9 +1,35 @@
 {{define "content"}}
-<section class="tarjeta">
-  <h1>Playlist compartida, cada quien en su app</h1>
-  <p>Aporta canciones al pool del grupo. Cada persona tiene su ventana de 10 canciones, por turnos, y la escucha en la plataforma que ya usa.</p>
-  <p class="nota">En construcción: fase F1 (núcleo universal).</p>
-  <button hx-get="/healthz" hx-target="#estado" hx-swap="innerHTML">Comprobar servidor</button>
-  <span id="estado" aria-live="polite"></span>
-</section>
+<div class="pila">
+  <section class="tarjeta">
+    <h1>Playlist compartida, cada quien en su app</h1>
+    <p>Aporta canciones a un pool con tus amigos. Cada quien tiene una ventana de 10 canciones, por turnos, y las abre en la plataforma que ya usa.</p>
+  </section>
+
+  {{if .Grupos}}
+  <section class="tarjeta">
+    <h2>Tus grupos</h2>
+    <ul class="lista">
+      {{range .Grupos}}<li><a href="/g/{{.Codigo}}">{{.Nombre}}</a></li>{{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  <section class="tarjeta">
+    <h2>Crear un grupo</h2>
+    {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+    <form method="post" action="/grupos" class="formulario">
+      <label>Nombre del grupo
+        <input name="nombre_grupo" required maxlength="60" autocomplete="off">
+      </label>
+      {{if .Nombre}}
+      <p class="nota">Lo crearás como {{.Nombre}}.</p>
+      {{else}}
+      <label>Tu nombre
+        <input name="tu_nombre" required maxlength="40" autocomplete="nickname">
+      </label>
+      {{end}}
+      <button type="submit">Crear grupo</button>
+    </form>
+  </section>
+</div>
 {{end}}
