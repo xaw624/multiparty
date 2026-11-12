@@ -95,6 +95,12 @@ func New(db *sql.DB, log *slog.Logger, op Opciones) (*Server, error) {
 	return s, nil
 }
 
+// Store da acceso al almacenamiento (para las tareas de fondo).
+func (s *Server) Store() *pool.Store { return s.store }
+
+// Conexiones da acceso a las cuentas conectadas (para las tareas de fondo).
+func (s *Server) Conexiones() *conexion.Conexiones { return s.con }
+
 // Routes devuelve el enrutador con todas las rutas registradas.
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"sort"
+	"time"
 )
 
 // Espejo es la playlist de un miembro en su plataforma de escucha.
@@ -181,27 +182,9 @@ func planEspejoTx(ctx context.Context, tx *sql.Tx, grupoID, usuarioID int64) (Pl
 	}
 	sort.Ints(posiciones)
 	for _, pos := range posiciones {
-		c := CancionEspejo{Posicion: pos}
-		var trackID sql.NullString
-		err := tx.QueryRowContext(ctx, `
-			SELECT c.id, c.titulo, c.artista, COALESCE(c.isrc, ''), COALESCE(c.duracion_ms, 0) / 1000,
-			       (SELECT track_id FROM mapeos
-			         WHERE cancion_id = c.id AND plataforma IN (?, ?) AND track_id IS NOT NULL
-			         ORDER BY plataforma DESC LIMIT 1),
-			       EXISTS (SELECT 1 FROM revision
-			         WHERE cancion_id = c.id AND plataforma = ? AND estado = 'abierta')
-			FROM orden o
-			JOIN aportes a ON a.id = o.aporte_id
-			JOIN canciones c ON c.id = a.cancion_id
-			WHERE o.grupo_id = ? AND o.posicion = ?`,
-			p.Espejo.Plataforma, plataformaMusica(p.Espejo.Plataforma), p.Espejo.Plataforma, grupoID, pos).
-			Scan(&c.CancionID, &c.Titulo, &c.Artista, &c.ISRC, &c.DuracionS, &trackID, &c.SinCoincidencia)
+		c, err := cancionEspejoTx(ctx, tx, grupoID, pos, p.Espejo.Plataforma)
 		if err != nil {
 			return p, err
-		}
-		c.TrackID = trackID.String
-		if c.TrackID != "" {
-			c.SinCoincidencia = false
 		}
 		p.Ventana = append(p.Ventana, c)
 		if !enPlaylist[pos] {
@@ -209,6 +192,34 @@ func planEspejoTx(ctx context.Context, tx *sql.Tx, grupoID, usuarioID int64) (Pl
 		}
 	}
 	return p, nil
+}
+
+// cancionEspejoTx devuelve la canción de una posición con su id en la
+// plataforma (si ya se emparejó) y si quedó sin coincidencia.
+func cancionEspejoTx(ctx context.Context, tx *sql.Tx, grupoID int64, pos int, plataforma string) (CancionEspejo, error) {
+	c := CancionEspejo{Posicion: pos}
+	var trackID sql.NullString
+	err := tx.QueryRowContext(ctx, `
+		SELECT c.id, c.titulo, c.artista, COALESCE(c.isrc, ''), COALESCE(c.duracion_ms, 0) / 1000,
+		       (SELECT track_id FROM mapeos
+		         WHERE cancion_id = c.id AND plataforma IN (?, ?) AND track_id IS NOT NULL
+		         ORDER BY plataforma DESC LIMIT 1),
+		       EXISTS (SELECT 1 FROM revision
+		         WHERE cancion_id = c.id AND plataforma = ? AND estado = 'abierta')
+		FROM orden o
+		JOIN aportes a ON a.id = o.aporte_id
+		JOIN canciones c ON c.id = a.cancion_id
+		WHERE o.grupo_id = ? AND o.posicion = ?`,
+		plataforma, plataformaMusica(plataforma), plataforma, grupoID, pos).
+		Scan(&c.CancionID, &c.Titulo, &c.Artista, &c.ISRC, &c.DuracionS, &trackID, &c.SinCoincidencia)
+	if err != nil {
+		return c, err
+	}
+	c.TrackID = trackID.String
+	if c.TrackID != "" {
+		c.SinCoincidencia = false
+	}
+	return c, nil
 }
 
 // plataformaMusica es la variante "de música" de una plataforma: el mismo id
@@ -274,5 +285,135 @@ func (s *Store) SinCoincidencia(ctx context.Context, cancionID int64, plataforma
 		SELECT ?, ?, ? WHERE NOT EXISTS (
 			SELECT 1 FROM revision WHERE cancion_id = ? AND plataforma = ? AND estado = 'abierta')`,
 		cancionID, plataforma, candidatosJSON, cancionID, plataforma)
+	return err
+}
+
+// EspejoMiembro identifica la playlist espejo de una persona en un grupo.
+type EspejoMiembro struct {
+	GrupoID   int64
+	UsuarioID int64
+}
+
+// EspejosDe lista todas las playlists espejo de una plataforma.
+func (s *Store) EspejosDe(ctx context.Context, plataforma string) ([]EspejoMiembro, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.grupo_id, m.usuario_id FROM espejos e JOIN miembros m ON m.id = e.miembro_id
+		WHERE e.plataforma = ? ORDER BY m.usuario_id, m.grupo_id`, plataforma)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []EspejoMiembro
+	for rows.Next() {
+		var e EspejoMiembro
+		if err := rows.Scan(&e.GrupoID, &e.UsuarioID); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// MarcarEscuchadaPorTrack marca como escuchada la canción de la ventana del
+// usuario que tenga ese id en la plataforma. Dice si encontró alguna.
+func (s *Store) MarcarEscuchadaPorTrack(ctx context.Context, grupoID, usuarioID int64, trackID string) (bool, error) {
+	plan, err := s.PlanDeEspejo(ctx, grupoID, usuarioID)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range plan.Ventana {
+		if c.TrackID == trackID {
+			return true, s.MarcarEscuchada(ctx, grupoID, usuarioID, c.Posicion)
+		}
+	}
+	return false, nil
+}
+
+// PorEmparejar es una canción de una ventana (o a punto de entrar) que aún no
+// tiene id en la plataforma.
+type PorEmparejar struct {
+	UsuarioID int64
+	Cancion   CancionEspejo
+}
+
+// ProximasSinEmparejar lista, en todos los espejos de la plataforma, las
+// canciones de la ventana y de las siguientes adelanto posiciones que aún no
+// se emparejaron ni quedaron en revisión. Cada canción aparece una vez.
+func (s *Store) ProximasSinEmparejar(ctx context.Context, plataforma string, adelanto int) ([]PorEmparejar, error) {
+	espejos, err := s.EspejosDe(ctx, plataforma)
+	if err != nil {
+		return nil, err
+	}
+	var out []PorEmparejar
+	vistas := map[int64]bool{}
+	err = s.enTx(ctx, func(tx *sql.Tx) error {
+		for _, e := range espejos {
+			miembroID, cursor, err := miembroTx(ctx, tx, e.GrupoID, e.UsuarioID)
+			if err != nil {
+				return err
+			}
+			var total int
+			if err := tx.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM orden WHERE grupo_id = ?`, e.GrupoID).Scan(&total); err != nil {
+				return err
+			}
+			esc, err := escuchadasDe(ctx, tx, miembroID, cursor)
+			if err != nil {
+				return err
+			}
+			for _, pos := range Ventana(cursor, total, esc, TamVentana+adelanto) {
+				c, err := cancionEspejoTx(ctx, tx, e.GrupoID, pos, plataforma)
+				if err != nil {
+					return err
+				}
+				if c.TrackID != "" || c.SinCoincidencia || vistas[c.CancionID] {
+					continue
+				}
+				vistas[c.CancionID] = true
+				out = append(out, PorEmparejar{UsuarioID: e.UsuarioID, Cancion: c})
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
+// MapeoViejo es un id de YouTube que hay que volver a verificar.
+type MapeoViejo struct {
+	CancionID int64
+	TrackID   string
+}
+
+// MapeosPorVerificar lista hasta n ids de video verificados antes de antes.
+func (s *Store) MapeosPorVerificar(ctx context.Context, antes time.Time, n int) ([]MapeoViejo, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT cancion_id, track_id FROM mapeos
+		WHERE plataforma IN ('youtube', 'youtubeMusic') AND track_id IS NOT NULL
+		  AND verificado_en < ?
+		ORDER BY verificado_en LIMIT ?`, antes.UTC().Format("2006-01-02 15:04:05"), n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MapeoViejo
+	for rows.Next() {
+		var m MapeoViejo
+		if err := rows.Scan(&m.CancionID, &m.TrackID); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// VideoVerificado renueva la fecha de verificación de un video que sigue
+// existiendo, o borra sus mapeos si ya no existe.
+func (s *Store) VideoVerificado(ctx context.Context, videoID string, existe bool) error {
+	consulta := `UPDATE mapeos SET verificado_en = datetime('now')
+		WHERE plataforma IN ('youtube', 'youtubeMusic') AND track_id = ?`
+	if !existe {
+		consulta = `DELETE FROM mapeos WHERE plataforma IN ('youtube', 'youtubeMusic') AND track_id = ?`
+	}
+	_, err := s.db.ExecContext(ctx, consulta, videoID)
 	return err
 }

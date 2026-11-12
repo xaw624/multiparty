@@ -77,6 +77,44 @@ func (s *Store) CuentaDe(ctx context.Context, usuarioID int64, plataforma string
 	return c, nil
 }
 
+// CursorEscuchas devuelve hasta cuándo ya se revisaron las escuchas del
+// usuario en la plataforma; false si nunca se revisaron.
+func (s *Store) CursorEscuchas(ctx context.Context, usuarioID int64, plataforma string) (time.Time, bool, error) {
+	var v sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT escuchas_desde FROM cuentas WHERE usuario_id = ? AND plataforma = ?`, usuarioID, plataforma).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !v.Valid) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	t, err := time.Parse(time.RFC3339Nano, v.String)
+	return t, err == nil, nil
+}
+
+// GuardarCursorEscuchas guarda hasta cuándo ya se revisaron las escuchas.
+func (s *Store) GuardarCursorEscuchas(ctx context.Context, usuarioID int64, plataforma string, t time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE cuentas SET escuchas_desde = ? WHERE usuario_id = ? AND plataforma = ?`,
+		t.UTC().Format(time.RFC3339Nano), usuarioID, plataforma)
+	return err
+}
+
+// AlgunaCuenta devuelve un usuario con la plataforma conectada (para tareas
+// que solo necesitan leer datos públicos con un token válido).
+func (s *Store) AlgunaCuenta(ctx context.Context, plataforma string) (int64, bool, error) {
+	var uid int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT usuario_id FROM cuentas
+		WHERE plataforma = ? AND refresh_token_cifrado IS NOT NULL
+		ORDER BY id LIMIT 1`, plataforma).Scan(&uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	return uid, err == nil, err
+}
+
 // InvalidarCuenta borra los tokens de una cuenta revocada o caducada, pero
 // conserva su playlist espejo: al volver a conectar, se sigue usando.
 func (s *Store) InvalidarCuenta(ctx context.Context, usuarioID int64, plataforma string) error {

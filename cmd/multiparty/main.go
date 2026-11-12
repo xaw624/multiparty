@@ -19,6 +19,7 @@ import (
 	"github.com/xaw624/multiparty/internal/db"
 	"github.com/xaw624/multiparty/internal/resolver"
 	"github.com/xaw624/multiparty/internal/spotify"
+	"github.com/xaw624/multiparty/internal/tareas"
 	"github.com/xaw624/multiparty/internal/web"
 	"github.com/xaw624/multiparty/internal/youtube"
 )
@@ -94,6 +95,9 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	// Escuchas de Spotify, pre-emparejar y refrescar datos de YouTube.
+	tareas.New(app.Store(), app.Conexiones(), logger).Correr(ctx)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
