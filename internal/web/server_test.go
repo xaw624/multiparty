@@ -51,7 +51,7 @@ func servidorPrueba(t *testing.T) *httptest.Server {
 		"https://open.spotify.com/track/1": cancionFalsa("Canción Uno"),
 		"https://open.spotify.com/track/2": cancionFalsa("Canción Dos"),
 	}
-	srv, err := New(database, slog.New(slog.NewTextHandler(io.Discard, nil)), res, []byte("clave-de-prueba"))
+	srv, err := New(database, slog.New(slog.NewTextHandler(io.Discard, nil)), Opciones{Resolver: res, Secreto: []byte("clave-de-prueba")})
 	if err != nil {
 		t.Fatal(err)
 	}

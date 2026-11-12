@@ -342,8 +342,8 @@ func buscarOCrearCancion(ctx context.Context, tx *sql.Tx, c CancionResuelta) (in
 			titulo = "(sin título)"
 		}
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO canciones (isrc, titulo, artista, portada_url) VALUES (?, ?, ?, ?)`,
-			nulo(c.ISRC), titulo, c.Artista, nulo(c.PortadaURL))
+			`INSERT INTO canciones (isrc, titulo, artista, duracion_ms, portada_url) VALUES (?, ?, ?, ?, ?)`,
+			nulo(c.ISRC), titulo, c.Artista, nuloInt(c.DuracionMS), nulo(c.PortadaURL))
 		if err != nil {
 			return 0, err
 		}
@@ -352,7 +352,15 @@ func buscarOCrearCancion(ctx context.Context, tx *sql.Tx, c CancionResuelta) (in
 		}
 	}
 
-	for _, e := range c.Enlaces {
+	if err := guardarEnlaces(ctx, tx, id, c.Enlaces); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// guardarEnlaces inserta o actualiza los mapeos de una canción.
+func guardarEnlaces(ctx context.Context, tx *sql.Tx, cancionID int64, enlaces []Enlace) error {
+	for _, e := range enlaces {
 		if e.URL == "" {
 			continue
 		}
@@ -370,11 +378,11 @@ func buscarOCrearCancion(ctx context.Context, tx *sql.Tx, c CancionResuelta) (in
 				confianza = excluded.confianza,
 				verificado_en = datetime('now')
 			WHERE mapeos.confianza NOT IN ('directo', 'manual') OR excluded.confianza = 'directo'`,
-			id, e.Plataforma, nulo(e.TrackID), e.URL, string(confianza)); err != nil {
-			return 0, err
+			cancionID, e.Plataforma, nulo(e.TrackID), e.URL, string(confianza)); err != nil {
+			return err
 		}
 	}
-	return id, nil
+	return nil
 }
 
 func nulo(s string) any {
@@ -382,6 +390,13 @@ func nulo(s string) any {
 		return nil
 	}
 	return s
+}
+
+func nuloInt(n int) any {
+	if n == 0 {
+		return nil
+	}
+	return n
 }
 
 func contiene(xs []int, x int) bool {

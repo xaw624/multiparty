@@ -26,8 +26,10 @@
       {{range .Ventana}}
       <li>
         {{template "cancion" .}}
+        {{if .SinCoincidencia}}<span class="etiqueta" title="Ábrela con su link">No está en YouTube</span>{{end}}
         <form method="post" action="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}"
-              hx-post="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}" hx-target="#grupo" hx-swap="outerHTML">
+              hx-post="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}" hx-target="#grupo" hx-swap="outerHTML"
+              hx-disabled-elt="find button">
           <button type="submit" class="secundario" aria-label="Ya escuché «{{.Titulo}}»">Ya la escuché</button>
         </form>
       </li>
@@ -37,6 +39,8 @@
     <p class="nota">No tienes canciones por escuchar. Agrega una o espera a que alguien aporte.</p>
     {{end}}
   </section>
+
+  {{if .GoogleDisponible}}{{template "youtube" .}}{{end}}
 
   {{if .Despues}}
   <section class="tarjeta">
@@ -90,6 +94,41 @@
     </form>
   </section>
 </div>
+{{end}}
+
+{{define "youtube"}}
+<section class="tarjeta">
+  <h2>Escuchar en YouTube Music</h2>
+  {{if not .CuentaYouTube}}
+  <p class="nota">Conecta tu cuenta para tener tu ventana como playlist en YouTube Music e importar canciones de tus playlists.</p>
+  <a class="boton" href="/cuentas/youtube/conectar?volver=/g/{{.Grupo.Codigo}}">Conectar YouTube</a>
+  {{else}}
+  <p class="nota">Conectado como <strong>{{.CuentaYouTube}}</strong>.</p>
+  {{if and .Espejo (eq .Espejo.Plataforma "youtube")}}
+  <p><a href="{{.Espejo.URL}}" target="_blank" rel="noopener noreferrer">Abrir mi playlist en YouTube Music</a></p>
+  <p class="nota">{{if .Pendientes}}{{.Pendientes}} {{if eq .Pendientes 1}}cambio{{else}}cambios{{end}} por sincronizar.{{else}}Tu playlist está al día.{{end}}
+    Se actualiza cuando marcas «Ya la escuché» o con este botón.</p>
+  <form method="post" action="/g/{{.Grupo.Codigo}}/sincronizar"
+        hx-post="/g/{{.Grupo.Codigo}}/sincronizar" hx-target="#grupo" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <button type="submit">Sincronizar ahora</button>
+  </form>
+  {{else}}
+  <p class="nota">Se creará una playlist privada «Multiparty · {{.Grupo.Nombre}}» en tu canal. Multiparty solo agrega y quita canciones de esa playlist cuando tú lo pides: al crearla, al marcar «Ya la escuché» o con «Sincronizar».</p>
+  <form method="post" action="/g/{{.Grupo.Codigo}}/espejo/youtube"
+        hx-post="/g/{{.Grupo.Codigo}}/espejo/youtube" hx-target="#grupo" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <button type="submit">Crear mi playlist</button>
+  </form>
+  {{end}}
+  <p class="acciones">
+    <a href="/g/{{.Grupo.Codigo}}/importar">Importar de mis playlists</a>
+  </p>
+  <form method="post" action="/cuentas/youtube/desconectar"
+        onsubmit="return confirm('¿Desconectar YouTube? Tu playlist seguirá en tu cuenta, pero ya no se actualizará.')">
+    <input type="hidden" name="volver" value="/g/{{.Grupo.Codigo}}">
+    <button type="submit" class="secundario">Desconectar YouTube</button>
+  </form>
+  {{end}}
+</section>
 {{end}}
 
 {{define "cancion"}}

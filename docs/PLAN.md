@@ -210,13 +210,23 @@ revision        (cancion_id, plataforma, candidatos_json, estado, resuelto_por)
 |---|---|---|
 | **F0** ✅ | Repo, plan y esqueleto del proyecto | — |
 | **F1. Núcleo universal** ✅ | Grupos con invitación, pegar link (resolvedor propio), orden intercalado, ventana de 10 por persona en la web con botón "ya la escuché" (nivel 3 para **todas** las plataformas) | Fuentes públicas sin clave |
-| **F2. YouTube Music** | OAuth de Google, playlist espejo, rotación con botón, importar desde playlists | YouTube Data API |
+| **F2. YouTube Music** ✅ | OAuth de Google, playlist espejo, rotación con botón, importar desde playlists (guía: [GOOGLE.md](GOOGLE.md)) | YouTube Data API |
 | **F3. Spotify** | OAuth, playlist espejo, detección automática de escuchas, búsqueda e importación | Spotify Web API |
 | **F4. Revisión manual** | Pantalla para elegir entre candidatos cuando la coincidencia no es confiable | — |
 | **F5. Versión pública** *(si se decide)* | Anuncios, política de privacidad, consentimiento, verificación de Google, Spotify en nivel 3 | — |
 | Después | Apple Music (nivel 2), reproductor web | MusicKit |
 
 La F1 ya sirve por sí sola: funciona con cualquier plataforma sin conectar ninguna cuenta.
+
+### Implementación en F2
+
+- **Login con Google** (OAuth con PKCE, acceso offline). Los tokens se guardan cifrados con AES-256-GCM (`MULTIPARTY_CLAVE_TOKENS`).
+- **Playlist espejo:** una playlist privada `Multiparty · <grupo>` por persona. Se sincroniza **solo por acción del usuario** (crearla, «Ya la escuché», «Sincronizar»), como pide la política de YouTube.
+- **Emparejamiento con YouTube** al sincronizar: búsqueda en la categoría Música, se prefieren canales «Artista - Topic» (pistas de YouTube Music) y se compara la duración (±5 s en pistas Topic, ±20 s en videos). Si no hay coincidencia, la canción queda en `revision` y no se vuelve a buscar.
+- **Cuota agotada:** la sincronización se detiene y continúa donde quedó la siguiente vez.
+- **Importar:** hasta 50 canciones por vez desde las playlists del usuario; entran al final de su fila. La lista «Me gusta» de YouTube Music no está disponible en la API.
+- **Desconectar:** revoca el permiso en Google y borra los tokens; la playlist queda en la cuenta del usuario.
+- **Pendiente:** resolver por adelantado las canciones que están a 5 posiciones de entrar a una ventana (hoy se buscan al sincronizar), y refrescar cada 30 días los datos obtenidos de YouTube (política III.E.4).
 
 ## 12. Decisiones pendientes
 

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/xaw624/multiparty/internal/pool"
+	"github.com/xaw624/multiparty/internal/texto"
 )
 
 // toleranciaDuracion es la diferencia máxima, en segundos, para considerar
@@ -126,6 +127,7 @@ func (r *Resolver) Resolver(ctx context.Context, enlace string) (pool.CancionRes
 		Titulo:     d.titulo,
 		Artista:    d.artista,
 		PortadaURL: d.portada,
+		DuracionMS: d.duracionS * 1000,
 		Enlaces:    enlaces,
 	}, nil
 }
@@ -136,12 +138,12 @@ func (r *Resolver) buscar(ctx context.Context, d datos, fuente func(context.Cont
 	if d.artista == "" || d.titulo == "" {
 		return datos{}, false
 	}
-	resultados, err := fuente(ctx, d.artista+" "+normalizar(d.titulo))
+	resultados, err := fuente(ctx, d.artista+" "+texto.Normalizar(d.titulo))
 	if err != nil {
 		return datos{}, false
 	}
 	for _, c := range resultados {
-		if !mismoTitulo(d.titulo, c.titulo) || !mismoArtista(d.artista, c.artista) {
+		if !texto.MismoTitulo(d.titulo, c.titulo) || !texto.MismoArtista(d.artista, c.artista) {
 			continue
 		}
 		if d.duracionS > 0 && c.duracionS > 0 && abs(d.duracionS-c.duracionS) > toleranciaDuracion {

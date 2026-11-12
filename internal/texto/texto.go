@@ -1,4 +1,5 @@
-package resolver
+// Paquete texto compara y limpia títulos y artistas de canciones.
+package texto
 
 import (
 	"regexp"
@@ -18,11 +19,11 @@ var (
 	)
 )
 
-// limpiarYouTube separa artista y título de un video de YouTube.
+// LimpiarYouTube separa artista y título de un video de YouTube.
 //
 // Los canales "Artista - Topic" son pistas de YouTube Music con título limpio.
 // En los demás, el formato habitual es "Artista - Canción (Official Video)".
-func limpiarYouTube(titulo, canal string) (string, string) {
+func LimpiarYouTube(titulo, canal string) (string, string) {
 	if a, ok := strings.CutSuffix(canal, " - Topic"); ok {
 		return strings.TrimSpace(titulo), a
 	}
@@ -37,9 +38,9 @@ func limpiarYouTube(titulo, canal string) (string, string) {
 	return strings.TrimSpace(titulo), strings.TrimSpace(artista)
 }
 
-// normalizar deja un texto comparable: minúsculas, sin acentos, sin
+// Normalizar deja un texto comparable: minúsculas, sin acentos, sin
 // paréntesis ni sufijos de versión, solo letras y números.
-func normalizar(s string) string {
+func Normalizar(s string) string {
 	s = sufijoVersion.ReplaceAllString(s, "")
 	s = parentesis.ReplaceAllString(s, "")
 	s = sinAcentos.Replace(strings.ToLower(s))
@@ -57,15 +58,15 @@ func normalizar(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// mismoTitulo compara títulos ya normalizados por igualdad.
-func mismoTitulo(a, b string) bool {
-	na, nb := normalizar(a), normalizar(b)
+// MismoTitulo dice si dos títulos son iguales una vez normalizados.
+func MismoTitulo(a, b string) bool {
+	na, nb := Normalizar(a), Normalizar(b)
 	return na != "" && na == nb
 }
 
-// mismoArtista tolera colaboraciones: "Bad Bunny" coincide con "Bad Bunny & Drake".
-func mismoArtista(a, b string) bool {
-	na, nb := normalizar(a), normalizar(b)
+// MismoArtista tolera colaboraciones: "Bad Bunny" coincide con "Bad Bunny & Drake".
+func MismoArtista(a, b string) bool {
+	na, nb := Normalizar(a), Normalizar(b)
 	if na == "" || nb == "" {
 		return false
 	}

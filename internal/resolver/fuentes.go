@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/xaw624/multiparty/internal/pool"
+	"github.com/xaw624/multiparty/internal/texto"
 )
 
 // datos son los metadatos de una canción en una fuente.
@@ -181,7 +182,7 @@ func (r *Resolver) youtube(ctx context.Context, id string) (datos, error) {
 		// oEmbed responde 401/403 para videos privados o sin inserción.
 		return datos{}, err
 	}
-	titulo, artista := limpiarYouTube(o.Title, o.AuthorName)
+	titulo, artista := texto.LimpiarYouTube(o.Title, o.AuthorName)
 	return datos{titulo: titulo, artista: artista, portada: o.ThumbnailURL, id: id}, nil
 }
 

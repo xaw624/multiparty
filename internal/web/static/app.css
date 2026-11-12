@@ -138,3 +138,29 @@ button.secundario {
 .info a:hover { text-decoration: underline; }
 
 .miembros { margin: 0; padding-left: 20px; }
+
+.boton {
+  display: inline-block;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--acento);
+  color: #fff;
+  text-decoration: none;
+}
+
+.acciones { margin: 12px 0; }
+
+.etiqueta {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--acento-suave);
+  color: var(--tenue);
+  white-space: nowrap;
+}
+
+.lista-check { list-style: none; margin: 0; padding: 0; width: 100%; }
+.lista-check li { border-top: 1px solid var(--borde); }
+.lista-check li:first-child { border-top: 0; }
+.lista-check label { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; cursor: pointer; }
+.lista-check input { width: auto; }

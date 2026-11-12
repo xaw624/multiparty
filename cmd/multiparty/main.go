@@ -11,10 +11,15 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/endpoints"
+
+	"github.com/xaw624/multiparty/internal/cifrado"
 	"github.com/xaw624/multiparty/internal/config"
 	"github.com/xaw624/multiparty/internal/db"
 	"github.com/xaw624/multiparty/internal/resolver"
 	"github.com/xaw624/multiparty/internal/web"
+	"github.com/xaw624/multiparty/internal/youtube"
 )
 
 func main() {
@@ -26,7 +31,10 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -45,7 +53,29 @@ func run(logger *slog.Logger) error {
 		logger.Warn("MULTIPARTY_SECRET no está definido: se usa uno aleatorio y las sesiones se pierden al reiniciar")
 	}
 
-	app, err := web.New(database, logger, resolver.New(cfg.Pais), cfg.Secreto)
+	op := web.Opciones{
+		Resolver: resolver.New(cfg.Pais),
+		Secreto:  cfg.Secreto,
+	}
+	if cfg.GoogleHabilitado() {
+		caja, err := cifrado.DesdeBase64(cfg.ClaveTokens)
+		if err != nil {
+			return errors.Join(errors.New("MULTIPARTY_CLAVE_TOKENS inválida"), err)
+		}
+		op.Caja = caja
+		op.Google = &oauth2.Config{
+			ClientID:     cfg.GoogleClientID,
+			ClientSecret: cfg.GoogleClientSecret,
+			Endpoint:     endpoints.Google,
+			RedirectURL:  cfg.BaseURL + "/cuentas/youtube/callback",
+			Scopes:       []string{youtube.Scope},
+		}
+		logger.Info("YouTube Music habilitado", "redirect", op.Google.RedirectURL)
+	} else {
+		logger.Info("YouTube Music deshabilitado: falta GOOGLE_CLIENT_ID")
+	}
+
+	app, err := web.New(database, logger, op)
 	if err != nil {
 		return err
 	}

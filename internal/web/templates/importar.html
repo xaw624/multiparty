@@ -1,0 +1,32 @@
+{{define "title"}}Importar · {{.Grupo.Nombre}} · Multiparty{{end}}
+
+{{define "content"}}
+<section class="tarjeta">
+  <p><a href="/g/{{.Grupo.Codigo}}">← Volver a {{.Grupo.Nombre}}</a></p>
+  <h1>Importar de YouTube</h1>
+  {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+
+  {{if .Videos}}
+  <p class="nota">Elige hasta {{.Max}} canciones{{with .PlaylistTitulo}} de «{{.}}»{{end}}. Entrarán al final de tu fila, en este orden.</p>
+  <form method="post" action="/g/{{.Grupo.Codigo}}/importar" class="formulario"
+        onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Importando…'">
+    <ul class="lista-check">
+      {{range .Videos}}
+      <li><label><input type="checkbox" name="v" value="{{.ID}}"> <span>{{.Titulo}} <span class="nota">· {{.Canal}}</span></span></label></li>
+      {{end}}
+    </ul>
+    <button type="submit">Importar las seleccionadas</button>
+  </form>
+  {{else if .Playlists}}
+  <p class="nota">Elige una de tus playlists:</p>
+  <ul class="lista">
+    {{range .Playlists}}
+    <li><a href="/g/{{$.Grupo.Codigo}}/importar?playlist={{.ID}}&t={{.Titulo}}">{{.Titulo}}</a> <span class="nota">· {{.Cantidad}}</span></li>
+    {{end}}
+  </ul>
+  {{else if not .Error}}
+  <p class="nota">No encontré canciones aquí.</p>
+  {{end}}
+  <p class="nota">La lista «Me gusta» de YouTube Music no está disponible por la API; copia esas canciones a una playlist para importarlas.</p>
+</section>
+{{end}}

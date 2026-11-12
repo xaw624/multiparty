@@ -7,7 +7,7 @@ Playlist compartida entre plataformas. Un grupo de amigos aporta canciones a un 
 - Se aportan canciones pegando links de Spotify, YouTube, YouTube Music, Apple Music o Deezer. Los datos se obtienen de fuentes públicas sin clave (sin Odesli, cuya API se retiró en 2026).
 - Orden intercalado: una canción de cada quien, por turnos.
 
-> **Estado:** fase F1 lista: grupos, pegar links, turnos y ventana de 10 en la web. Lee el [plan del proyecto](docs/PLAN.md).
+> **Estado:** F1 y F2 listas: grupos, pegar links, turnos, ventana de 10 y playlist espejo en YouTube Music. Para activar YouTube, sigue [docs/GOOGLE.md](docs/GOOGLE.md). Lee el [plan del proyecto](docs/PLAN.md).
 
 ## Desarrollo
 
@@ -31,3 +31,7 @@ En producción define `MULTIPARTY_SECRET` (ver `.env.example`); sin ella las ses
 | `internal/resolver` | Convierte un link en datos de la canción y links a otras plataformas |
 | `internal/web` | Rutas, sesiones, plantillas y estilos |
 | `internal/db` | Conexión SQLite y migraciones |
+| `internal/youtube` | Cliente de la YouTube Data API |
+| `internal/espejo` | Sincroniza la playlist espejo con la ventana |
+| `internal/cifrado` | Cifra los tokens OAuth guardados |
+| `internal/texto` | Limpia y compara títulos y artistas |

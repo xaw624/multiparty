@@ -43,6 +43,7 @@ type CancionResuelta struct {
 	Titulo     string
 	Artista    string
 	PortadaURL string
+	DuracionMS int
 	Enlaces    []Enlace
 }
 

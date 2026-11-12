@@ -11,17 +11,20 @@ const CuantasDespues = 5
 
 // Item es una canción del orden común, lista para mostrarse.
 type Item struct {
-	Posicion  int
-	AporteID  int64
-	Titulo    string
-	Artista   string
-	Portada   string
-	URL       string // link en la plataforma preferida o página de song.link
-	Por       string // nombre de quien la aportó
-	EsMio     bool
-	usuarioID int64
-	cancionID int64
-	estado    string
+	Posicion int
+	AporteID int64
+	Titulo   string
+	Artista  string
+	Portada  string
+	URL      string // link en la plataforma preferida o página de song.link
+	Por      string // nombre de quien la aportó
+	EsMio    bool
+	// Solo con playlist espejo:
+	EnPlaylist      bool // ya está en la playlist
+	SinCoincidencia bool // no se encontró en la plataforma del espejo
+	usuarioID       int64
+	cancionID       int64
+	estado          string
 }
 
 // Yo es el miembro que está viendo la página.
@@ -50,6 +53,12 @@ type Vista struct {
 	Miembros      []ResumenMiembro
 	TotalPool     int
 	Plataformas   []Plataforma
+	// CuentaYouTube es el nombre del canal conectado; vacío si no hay.
+	CuentaYouTube string
+	// Espejo es la playlist del miembro; nil si escucha con links.
+	Espejo *Espejo
+	// Pendientes son los cambios que haría "Sincronizar".
+	Pendientes int
 }
 
 // Vista arma la página del grupo para el usuario. Devuelve ErrNoPermitido si
@@ -108,7 +117,37 @@ func (s *Store) Vista(ctx context.Context, grupoID, usuarioID int64) (Vista, err
 		}
 
 		v.Miembros, err = cargarResumen(ctx, tx, grupoID, usuarioID)
-		return err
+		if err != nil {
+			return err
+		}
+
+		err = tx.QueryRowContext(ctx, `
+			SELECT COALESCE(nombre_externo, id_externo) FROM cuentas
+			WHERE usuario_id = ? AND plataforma = 'youtube' AND refresh_token_cifrado IS NOT NULL`,
+			usuarioID).Scan(&v.CuentaYouTube)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		plan, err := planEspejoTx(ctx, tx, grupoID, usuarioID)
+		if errors.Is(err, ErrNoEncontrado) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		v.Espejo = &plan.Espejo
+		v.Pendientes = plan.Pendientes()
+		falta := map[int]CancionEspejo{}
+		for _, a := range plan.Agregar {
+			falta[a.Posicion] = a
+		}
+		for i := range v.Ventana {
+			a, pendiente := falta[v.Ventana[i].Posicion]
+			v.Ventana[i].EnPlaylist = !pendiente
+			v.Ventana[i].SinCoincidencia = pendiente && a.SinCoincidencia
+		}
+		return nil
 	})
 	return v, err
 }
