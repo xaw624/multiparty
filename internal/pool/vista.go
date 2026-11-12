@@ -53,8 +53,8 @@ type Vista struct {
 	Miembros      []ResumenMiembro
 	TotalPool     int
 	Plataformas   []Plataforma
-	// CuentaYouTube es el nombre del canal conectado; vacío si no hay.
-	CuentaYouTube string
+	// Cuentas conectadas: plataforma → nombre visible (canal o usuario).
+	Cuentas map[string]string
 	// Espejo es la playlist del miembro; nil si escucha con links.
 	Espejo *Espejo
 	// Pendientes son los cambios que haría "Sincronizar".
@@ -121,11 +121,23 @@ func (s *Store) Vista(ctx context.Context, grupoID, usuarioID int64) (Vista, err
 			return err
 		}
 
-		err = tx.QueryRowContext(ctx, `
-			SELECT COALESCE(nombre_externo, id_externo) FROM cuentas
-			WHERE usuario_id = ? AND plataforma = 'youtube' AND refresh_token_cifrado IS NOT NULL`,
-			usuarioID).Scan(&v.CuentaYouTube)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		v.Cuentas = map[string]string{}
+		filas, err := tx.QueryContext(ctx, `
+			SELECT plataforma, COALESCE(nombre_externo, id_externo) FROM cuentas
+			WHERE usuario_id = ? AND refresh_token_cifrado IS NOT NULL`, usuarioID)
+		if err != nil {
+			return err
+		}
+		for filas.Next() {
+			var p, n string
+			if err := filas.Scan(&p, &n); err != nil {
+				filas.Close()
+				return err
+			}
+			v.Cuentas[p] = n
+		}
+		filas.Close()
+		if err := filas.Err(); err != nil {
 			return err
 		}
 

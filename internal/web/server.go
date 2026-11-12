@@ -19,6 +19,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/xaw624/multiparty/internal/cifrado"
+	"github.com/xaw624/multiparty/internal/conexion"
 	"github.com/xaw624/multiparty/internal/pool"
 )
 
@@ -38,45 +39,48 @@ type Opciones struct {
 	Resolver Resolver
 	// Secreto firma las cookies de sesión.
 	Secreto []byte
-	// Google habilita YouTube Music; nil lo deshabilita.
-	Google *oauth2.Config
-	// Caja cifra los tokens OAuth; obligatoria si Google no es nil.
+	// Google habilita YouTube Music y Spotify habilita Spotify; nil los deshabilita.
+	Google  *oauth2.Config
+	Spotify *oauth2.Config
+	// Caja cifra los tokens OAuth; obligatoria con Google o Spotify.
 	Caja *cifrado.Caja
-	// YouTubeBase y RevocarURL reemplazan las URL de Google (pruebas).
+	// Reemplazan las URL de las API (pruebas).
 	YouTubeBase string
+	SpotifyBase string
 	RevocarURL  string
 }
 
 // Server agrupa las dependencias de los handlers.
 type Server struct {
-	db          *sql.DB
-	store       *pool.Store
-	resolver    Resolver
-	ses         sesiones
-	google      *oauth2.Config
-	caja        *cifrado.Caja
-	youtubeBase string
-	revocarURL  string
-	log         *slog.Logger
-	pages       map[string]*template.Template
+	db         *sql.DB
+	store      *pool.Store
+	resolver   Resolver
+	ses        sesiones
+	con        *conexion.Conexiones
+	revocarURL string
+	log        *slog.Logger
+	pages      map[string]*template.Template
 }
 
 // New prepara el servidor y compila las plantillas.
 func New(db *sql.DB, log *slog.Logger, op Opciones) (*Server, error) {
-	if op.Google != nil && op.Caja == nil {
-		return nil, fmt.Errorf("con Google hace falta una Caja para cifrar los tokens")
+	store := pool.NewStore(db)
+	con, err := conexion.New(store, log, conexion.Opciones{
+		Google: op.Google, Spotify: op.Spotify, Caja: op.Caja,
+		Bases: map[string]string{conexion.YouTube: op.YouTubeBase, conexion.Spotify: op.SpotifyBase},
+	})
+	if err != nil {
+		return nil, err
 	}
 	s := &Server{
-		db:          db,
-		store:       pool.NewStore(db),
-		resolver:    op.Resolver,
-		ses:         sesiones{clave: op.Secreto},
-		google:      op.Google,
-		caja:        op.Caja,
-		youtubeBase: op.YouTubeBase,
-		revocarURL:  op.RevocarURL,
-		log:         log,
-		pages:       map[string]*template.Template{},
+		db:         db,
+		store:      store,
+		resolver:   op.Resolver,
+		ses:        sesiones{clave: op.Secreto},
+		con:        con,
+		revocarURL: op.RevocarURL,
+		log:        log,
+		pages:      map[string]*template.Template{},
 	}
 	if s.revocarURL == "" {
 		s.revocarURL = "https://oauth2.googleapis.com/revoke"
@@ -111,11 +115,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /g/{codigo}/escuchada/{pos}", s.escuchada)
 	mux.HandleFunc("POST /g/{codigo}/preferencia", s.preferencia)
 
-	// YouTube Music (F2).
-	mux.HandleFunc("GET /cuentas/youtube/conectar", s.conectarYouTube)
-	mux.HandleFunc("GET /cuentas/youtube/callback", s.callbackYouTube)
-	mux.HandleFunc("POST /cuentas/youtube/desconectar", s.desconectarYouTube)
-	mux.HandleFunc("POST /g/{codigo}/espejo/youtube", s.crearEspejoYouTube)
+	// Cuentas de YouTube y Spotify (F2, F3).
+	mux.HandleFunc("GET /cuentas/{plataforma}/conectar", s.conectar)
+	mux.HandleFunc("GET /cuentas/{plataforma}/callback", s.callback)
+	mux.HandleFunc("POST /cuentas/{plataforma}/desconectar", s.desconectar)
+	mux.HandleFunc("POST /g/{codigo}/espejo/{plataforma}", s.crearEspejo)
 	mux.HandleFunc("POST /g/{codigo}/sincronizar", s.sincronizarHandler)
 	mux.HandleFunc("GET /g/{codigo}/importar", s.importarVer)
 	mux.HandleFunc("POST /g/{codigo}/importar", s.importar)
@@ -275,9 +279,9 @@ func (s *Server) escuchada(w http.ResponseWriter, r *http.Request) {
 		s.responder(w, r, g, uid, aviso{Error: s.mensajeError(err)})
 		return
 	}
-	// Con playlist en YouTube, la acción del usuario también la actualiza.
+	// Con playlist espejo, la acción del usuario también la actualiza.
 	a := aviso{}
-	if e, err := s.store.EspejoDe(r.Context(), g.ID, uid); err == nil && e.Plataforma == "youtube" && s.google != nil {
+	if e, err := s.store.EspejoDe(r.Context(), g.ID, uid); err == nil && s.con.Habilitada(e.Plataforma) {
 		a = s.sincronizar(r.Context(), g, uid, false)
 	}
 	s.responder(w, r, g, uid, a)
@@ -302,11 +306,12 @@ type aviso struct {
 
 type datosGrupo struct {
 	pool.Vista
-	Error            string
-	Mensaje          string
-	Enlace           string
-	InvitarURL       string
-	GoogleDisponible bool
+	Error             string
+	Mensaje           string
+	Enlace            string
+	InvitarURL        string
+	YouTubeDisponible bool
+	SpotifyDisponible bool
 }
 
 // responder devuelve el fragmento #grupo a HTMX, o redirige si es un
@@ -334,12 +339,13 @@ func (s *Server) renderGrupo(w http.ResponseWriter, r *http.Request, g pool.Grup
 		scheme = "https"
 	}
 	d := datosGrupo{
-		Vista:            v,
-		Error:            a.Error,
-		Mensaje:          a.Mensaje,
-		Enlace:           a.Enlace,
-		InvitarURL:       scheme + "://" + r.Host + "/g/" + g.Codigo,
-		GoogleDisponible: s.google != nil,
+		Vista:             v,
+		Error:             a.Error,
+		Mensaje:           a.Mensaje,
+		Enlace:            a.Enlace,
+		InvitarURL:        scheme + "://" + r.Host + "/g/" + g.Codigo,
+		YouTubeDisponible: s.con.Habilitada(conexion.YouTube),
+		SpotifyDisponible: s.con.Habilitada(conexion.Spotify),
 	}
 	if parcial {
 		s.ejecutar(w, "grupo.html", "grupo", d)

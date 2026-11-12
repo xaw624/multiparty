@@ -46,11 +46,13 @@ func (s *Store) GuardarCuenta(ctx context.Context, c Cuenta) error {
 	return err
 }
 
-// ActualizarTokens guarda un access token renovado.
-func (s *Store) ActualizarTokens(ctx context.Context, usuarioID int64, plataforma string, access []byte, expira time.Time) error {
+// ActualizarTokens guarda un access token renovado. Si refresh no viene
+// vacío, también reemplaza el refresh token (Spotify puede rotarlo).
+func (s *Store) ActualizarTokens(ctx context.Context, usuarioID int64, plataforma string, access, refresh []byte, expira time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE cuentas SET access_token_cifrado = ?, expira_en = ?
-		WHERE usuario_id = ? AND plataforma = ?`, access, fecha(expira), usuarioID, plataforma)
+		UPDATE cuentas SET access_token_cifrado = ?, expira_en = ?,
+		       refresh_token_cifrado = COALESCE(?, refresh_token_cifrado)
+		WHERE usuario_id = ? AND plataforma = ?`, access, fecha(expira), nuloBytes(refresh), usuarioID, plataforma)
 	return err
 }
 

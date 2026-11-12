@@ -28,7 +28,7 @@ En **APIs y servicios → Credenciales → Crear credenciales → ID de cliente 
 
 1. Tipo de aplicación: **Aplicación web**.
 2. **URI de redireccionamiento autorizados:** agrega la URL de tu sitio seguida de `/cuentas/youtube/callback`:
-   - En tu máquina: `http://localhost:8080/cuentas/youtube/callback`
+   - En tu máquina: `http://127.0.0.1:8080/cuentas/youtube/callback` (usa `127.0.0.1` y no `localhost`, porque Spotify no acepta `localhost` y conviene usar la misma URL para ambos)
    - En el servidor: `https://tu-dominio/cuentas/youtube/callback`
 3. Copia el **ID de cliente** y el **Secreto del cliente**.
 
@@ -38,7 +38,7 @@ En **APIs y servicios → Credenciales → Crear credenciales → ID de cliente 
 GOOGLE_CLIENT_ID=…apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=…
 # Debe coincidir con el URI de redireccionamiento (sin /cuentas/…).
-MULTIPARTY_BASE_URL=http://localhost:8080
+MULTIPARTY_BASE_URL=http://127.0.0.1:8080
 # Cifra los tokens guardados. Genérala una vez y no la cambies:
 # si la pierdes, cada persona tendrá que volver a conectar YouTube.
 MULTIPARTY_CLAVE_TOKENS=$(openssl rand -base64 32)

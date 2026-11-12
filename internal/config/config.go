@@ -27,6 +27,9 @@ type Config struct {
 	// GoogleClientID y GoogleClientSecret habilitan YouTube Music (F2).
 	GoogleClientID     string
 	GoogleClientSecret string
+	// SpotifyClientID y SpotifyClientSecret habilitan Spotify (F3).
+	SpotifyClientID     string
+	SpotifyClientSecret string
 	// ClaveTokens (base64, 32 bytes) cifra los tokens OAuth guardados.
 	ClaveTokens string
 }
@@ -34,30 +37,39 @@ type Config struct {
 // GoogleHabilitado dice si se configuró el acceso a YouTube.
 func (c Config) GoogleHabilitado() bool { return c.GoogleClientID != "" }
 
+// SpotifyHabilitado dice si se configuró el acceso a Spotify.
+func (c Config) SpotifyHabilitado() bool { return c.SpotifyClientID != "" }
+
 // Load lee la configuración del entorno y aplica valores por defecto.
 func Load() (Config, error) {
 	c := Config{
-		Addr:               env("MULTIPARTY_ADDR", ":8080"),
-		DatabasePath:       env("MULTIPARTY_DB", "data/multiparty.db"),
-		Secreto:            []byte(env("MULTIPARTY_SECRET", "")),
-		Pais:               env("MULTIPARTY_PAIS", "MX"),
-		BaseURL:            strings.TrimRight(env("MULTIPARTY_BASE_URL", "http://localhost:8080"), "/"),
-		GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
-		GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
-		ClaveTokens:        env("MULTIPARTY_CLAVE_TOKENS", ""),
+		Addr:                env("MULTIPARTY_ADDR", ":8080"),
+		DatabasePath:        env("MULTIPARTY_DB", "data/multiparty.db"),
+		Secreto:             []byte(env("MULTIPARTY_SECRET", "")),
+		Pais:                env("MULTIPARTY_PAIS", "MX"),
+		BaseURL:             strings.TrimRight(env("MULTIPARTY_BASE_URL", "http://127.0.0.1:8080"), "/"),
+		GoogleClientID:      env("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:  env("GOOGLE_CLIENT_SECRET", ""),
+		SpotifyClientID:     env("SPOTIFY_CLIENT_ID", ""),
+		SpotifyClientSecret: env("SPOTIFY_CLIENT_SECRET", ""),
+		ClaveTokens:         env("MULTIPARTY_CLAVE_TOKENS", ""),
 	}
 	if len(c.Secreto) == 0 {
 		c.Secreto = make([]byte, 32)
 		rand.Read(c.Secreto)
 		c.SecretoGenerado = true
 	}
-	if c.GoogleHabilitado() {
-		if c.GoogleClientSecret == "" {
-			return c, errors.New("GOOGLE_CLIENT_ID está definido pero falta GOOGLE_CLIENT_SECRET")
-		}
-		if c.ClaveTokens == "" {
-			return c, errors.New("para usar Google hay que definir MULTIPARTY_CLAVE_TOKENS (genera una con: openssl rand -base64 32)")
-		}
+	if c.GoogleHabilitado() && c.GoogleClientSecret == "" {
+		return c, errors.New("GOOGLE_CLIENT_ID está definido pero falta GOOGLE_CLIENT_SECRET")
+	}
+	if c.SpotifyHabilitado() && c.SpotifyClientSecret == "" {
+		return c, errors.New("SPOTIFY_CLIENT_ID está definido pero falta SPOTIFY_CLIENT_SECRET")
+	}
+	if (c.GoogleHabilitado() || c.SpotifyHabilitado()) && c.ClaveTokens == "" {
+		return c, errors.New("para conectar cuentas hay que definir MULTIPARTY_CLAVE_TOKENS (genera una con: openssl rand -base64 32)")
+	}
+	if c.SpotifyHabilitado() && strings.Contains(c.BaseURL, "://localhost") {
+		return c, errors.New("Spotify no acepta «localhost» en la URL de redirección: usa MULTIPARTY_BASE_URL=http://127.0.0.1:8080")
 	}
 	return c, nil
 }

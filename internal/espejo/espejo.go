@@ -18,8 +18,8 @@ import (
 	"github.com/xaw624/multiparty/internal/youtube"
 )
 
-// API es lo que el espejo necesita de la plataforma (hoy, YouTube).
-type API interface {
+// APIYouTube es lo que el espejo necesita de YouTube.
+type APIYouTube interface {
 	AgregarItem(ctx context.Context, playlistID, videoID string) (string, error)
 	QuitarItem(ctx context.Context, itemID string) error
 	Buscar(ctx context.Context, consulta string, max int) ([]youtube.Video, error)
@@ -47,10 +47,11 @@ func candado(miembroID int64) *sync.Mutex {
 	return m.(*sync.Mutex)
 }
 
-// Sincronizar quita de la playlist lo escuchado y agrega lo que falta de la
-// ventana. Si se agota la cuota a medias, devuelve lo hecho y el error; la
-// siguiente sincronización continúa donde quedó.
-func Sincronizar(ctx context.Context, st *pool.Store, api API, grupoID, usuarioID int64) (Resultado, error) {
+// SincronizarYouTube quita de la playlist lo escuchado y agrega lo que falta
+// de la ventana, elemento por elemento (cada cambio cuesta 50 unidades). Si
+// se agota la cuota a medias, devuelve lo hecho y el error; la siguiente
+// sincronización continúa donde quedó.
+func SincronizarYouTube(ctx context.Context, st *pool.Store, api APIYouTube, grupoID, usuarioID int64) (Resultado, error) {
 	var res Resultado
 	plan, err := st.PlanDeEspejo(ctx, grupoID, usuarioID)
 	if err != nil {
@@ -81,7 +82,7 @@ func Sincronizar(ctx context.Context, st *pool.Store, api API, grupoID, usuarioI
 		}
 		videoID := c.TrackID
 		if videoID == "" {
-			videoID, err = emparejar(ctx, st, api, c)
+			videoID, err = EmparejarYouTube(ctx, st, api, c)
 			if err != nil {
 				return res, err
 			}
@@ -102,9 +103,10 @@ func Sincronizar(ctx context.Context, st *pool.Store, api API, grupoID, usuarioI
 	return res, nil
 }
 
-// emparejar busca la canción en YouTube (100 unidades + 1 por duraciones) y
-// guarda el resultado. Devuelve "" si no hay una coincidencia confiable.
-func emparejar(ctx context.Context, st *pool.Store, api API, c pool.CancionEspejo) (string, error) {
+// EmparejarYouTube busca la canción en YouTube (100 unidades + 1 por
+// duraciones) y guarda el resultado. Devuelve "" si no hay una coincidencia
+// confiable; entonces la canción queda en revisión.
+func EmparejarYouTube(ctx context.Context, st *pool.Store, api APIYouTube, c pool.CancionEspejo) (string, error) {
 	videos, err := api.Buscar(ctx, c.Artista+" "+texto.Normalizar(c.Titulo), candidatos)
 	if err != nil {
 		return "", err
@@ -114,7 +116,11 @@ func emparejar(ctx context.Context, st *pool.Store, api API, c pool.CancionEspej
 		return "", err
 	}
 	if elegido == "" {
-		j, _ := json.Marshal(videos)
+		cands := make([]pool.Candidato, len(videos))
+		for i, v := range videos {
+			cands[i] = pool.Candidato{ID: v.ID, Titulo: v.Titulo, Detalle: v.Canal, URL: "https://music.youtube.com/watch?v=" + v.ID}
+		}
+		j, _ := json.Marshal(cands)
 		return "", st.SinCoincidencia(ctx, c.CancionID, "youtube", string(j))
 	}
 	err = st.GuardarEnlaces(ctx, c.CancionID, []pool.Enlace{
@@ -126,7 +132,7 @@ func emparejar(ctx context.Context, st *pool.Store, api API, c pool.CancionEspej
 
 // elegir prefiere pistas de canales "Artista - Topic" (las de YouTube Music)
 // y exige el mismo título, el mismo artista y una duración parecida.
-func elegir(ctx context.Context, api API, c pool.CancionEspejo, videos []youtube.Video) (string, error) {
+func elegir(ctx context.Context, api APIYouTube, c pool.CancionEspejo, videos []youtube.Video) (string, error) {
 	var ok []youtube.Video
 	for _, v := range videos {
 		t, a := texto.LimpiarYouTube(v.Titulo, v.Canal)

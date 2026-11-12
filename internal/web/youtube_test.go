@@ -20,6 +20,7 @@ import (
 
 	"github.com/xaw624/multiparty/internal/cifrado"
 	"github.com/xaw624/multiparty/internal/db"
+	"github.com/xaw624/multiparty/internal/spotify"
 	"github.com/xaw624/multiparty/internal/youtube"
 )
 
@@ -29,6 +30,7 @@ type googleFalso struct {
 	agregados    []string
 	quitados     []string
 	revocados    []string
+	reemplazos   [][]string
 	tokensUsados map[string]bool
 }
 
@@ -43,7 +45,8 @@ func (g *googleFalso) handler(t *testing.T) http.Handler {
 				t.Error("falta code_verifier (PKCE)")
 			}
 			// expires_in corto: el primer uso obliga a renovar.
-			fmt.Fprintf(w, `{"access_token":"at1","refresh_token":"rt1","expires_in":5,"token_type":"Bearer","scope":%q}`, youtube.Scope)
+			fmt.Fprintf(w, `{"access_token":"at1","refresh_token":"rt1","expires_in":5,"token_type":"Bearer","scope":%q}`,
+				youtube.Scope+" "+strings.Join(spotify.Scopes, " "))
 		case "refresh_token":
 			if r.PostForm.Get("refresh_token") != "rt1" {
 				w.WriteHeader(400)
@@ -98,6 +101,32 @@ func (g *googleFalso) handler(t *testing.T) http.Handler {
 	yt.HandleFunc("GET /search", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"items":[{"id":{"videoId":"v1"},"snippet":{"title":"Canción Uno","channelTitle":"Artista - Topic"}}]}`)
 	})
+	sp := http.NewServeMux()
+	sp.HandleFunc("GET /me", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"id":"beto123","display_name":"Beto"}`)
+	})
+	sp.HandleFunc("POST /me/playlists", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(201)
+		fmt.Fprint(w, `{"id":"PLsp"}`)
+	})
+	sp.HandleFunc("GET /me/playlists", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"next":null,"items":[{"id":"PLmio","name":"Mías","items":{"total":1}}]}`)
+	})
+	sp.HandleFunc("GET /playlists/PLmio/items", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"next":null,"items":[{"item":{"id":"trackA1","name":"De Spotify","type":"track",
+			"duration_ms":180000,"artists":[{"name":"Banda"}],"external_ids":{"isrc":"US9"}}}]}`)
+	})
+	sp.HandleFunc("PUT /playlists/PLsp/items", func(w http.ResponseWriter, r *http.Request) {
+		var c struct {
+			URIs []string `json:"uris"`
+		}
+		json.NewDecoder(r.Body).Decode(&c)
+		g.mu.Lock()
+		g.reemplazos = append(g.reemplazos, c.URIs)
+		g.mu.Unlock()
+		fmt.Fprint(w, `{"snapshot_id":"x"}`)
+	})
+	mux.Handle("/sp/", http.StripPrefix("/sp", sp))
 	mux.Handle("/yt/", http.StripPrefix("/yt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.tokensUsados[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")] = true
@@ -144,7 +173,14 @@ func nuevoEntornoYouTube(t *testing.T) entornoYouTube {
 			RedirectURL: "http://app.test/cuentas/youtube/callback",
 			Scopes:      []string{youtube.Scope},
 		},
+		Spotify: &oauth2.Config{
+			ClientID: "cliente-sp", ClientSecret: "secreto",
+			Endpoint:    oauth2.Endpoint{AuthURL: gs.URL + "/auth-sp", TokenURL: gs.URL + "/token"},
+			RedirectURL: "http://app.test/cuentas/spotify/callback",
+			Scopes:      spotify.Scopes,
+		},
 		YouTubeBase: gs.URL + "/yt",
+		SpotifyBase: gs.URL + "/sp",
 		RevocarURL:  gs.URL + "/revoke",
 	})
 	if err != nil {
@@ -196,7 +232,7 @@ func TestFlujoYouTube(t *testing.T) {
 	resp, _ = get(t, &sinSeguir, e.app.URL+"/cuentas/youtube/conectar?volver="+rutaG)
 	destino, _ = url.Parse(resp.Header.Get("Location"))
 	_, cuerpo := get(t, ana, e.app.URL+"/cuentas/youtube/callback?code=abc&state="+destino.Query().Get("state"))
-	debeContener(t, cuerpo, "YouTube conectado", "Conectado como <strong>Canal de Ana</strong>", "Crear mi playlist")
+	debeContener(t, cuerpo, "YouTube conectado", "Conectado como <strong>Canal de Ana</strong>", "Crear mi playlist en YouTube Music")
 
 	// Los tokens se guardan cifrados.
 	var refresh []byte
@@ -254,7 +290,7 @@ func TestSinGoogleNoHayRutasDeYouTube(t *testing.T) {
 	ts := servidorPrueba(t)
 	ana := cliente(t)
 	_, cuerpo := post(t, ana, ts.URL+"/grupos", url.Values{"nombre_grupo": {"Amigos"}, "tu_nombre": {"Ana"}}, false)
-	if strings.Contains(cuerpo, "Conectar YouTube") || strings.Contains(cuerpo, "Escuchar en YouTube Music") {
+	if strings.Contains(cuerpo, "Conectar YouTube") || strings.Contains(cuerpo, "Escuchar en tu app") {
 		t.Error("sin Google configurado no debe mostrarse la sección de YouTube")
 	}
 	resp, _ := get(t, ana, ts.URL+"/cuentas/youtube/conectar")
@@ -287,6 +323,51 @@ func TestImportarDeYouTube(t *testing.T) {
 	debeContener(t, cuerpo, "Importada Uno", `value="y1"`, `value="y3"`, "de «Favoritas»")
 
 	// y1 entra, y2 ya estaba (misma canción) e y3 no se encuentra.
-	_, cuerpo = post(t, ana, urlGrupo+"/importar", url.Values{"v": {"y1", "y2", "y3", "../malo"}}, false)
+	_, cuerpo = post(t, ana, urlGrupo+"/importar", url.Values{"de": {"youtube"}, "v": {"y1", "y2", "y3", "../malo"}}, false)
 	debeContener(t, cuerpo, "Importación: 1 canción agregada, 1 ya estaba, 1 no se encontró.", "Importada Uno")
+}
+
+func TestFlujoSpotify(t *testing.T) {
+	e := nuevoEntornoYouTube(t)
+	beto := cliente(t)
+	resp, _ := post(t, beto, e.app.URL+"/grupos", url.Values{"nombre_grupo": {"Amigos"}, "tu_nombre": {"Beto"}}, false)
+	rutaG := resp.Request.URL.Path
+	urlGrupo := e.app.URL + rutaG
+	post(t, beto, urlGrupo+"/aportes", url.Values{"enlace": {"https://open.spotify.com/track/1"}}, true)
+
+	sinSeguir := *beto
+	sinSeguir.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, _ = get(t, &sinSeguir, e.app.URL+"/cuentas/spotify/conectar?volver="+rutaG)
+	destino, _ := url.Parse(resp.Header.Get("Location"))
+	if destino.Path != "/auth-sp" || destino.Query().Get("show_dialog") != "true" || destino.Query().Get("code_challenge") == "" {
+		t.Fatalf("redirección a Spotify: %s", destino)
+	}
+	// El state de Spotify no sirve para el callback de YouTube.
+	resp, _ = get(t, beto, e.app.URL+"/cuentas/youtube/callback?code=abc&state="+destino.Query().Get("state"))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("callback cruzado: %d", resp.StatusCode)
+	}
+	resp, _ = get(t, &sinSeguir, e.app.URL+"/cuentas/spotify/conectar?volver="+rutaG)
+	destino, _ = url.Parse(resp.Header.Get("Location"))
+	_, cuerpo := get(t, beto, e.app.URL+"/cuentas/spotify/callback?code=abc&state="+destino.Query().Get("state"))
+	debeContener(t, cuerpo, "Spotify conectado", "Conectado como <strong>Beto</strong>", "Crear mi playlist en Spotify")
+
+	_, cuerpo = post(t, beto, urlGrupo+"/espejo/spotify", nil, true)
+	debeContener(t, cuerpo, "Playlist actualizada: 1 agregada", "open.spotify.com/playlist/PLsp", "Se actualiza sola")
+	if fmt.Sprint(e.google.reemplazos) != "[[spotify:track:sp-Canción Uno]]" {
+		t.Errorf("reemplazos = %v", e.google.reemplazos)
+	}
+
+	// Importar de Spotify usa los datos de la API (con ISRC).
+	_, cuerpo = get(t, beto, urlGrupo+"/importar?de=spotify")
+	debeContener(t, cuerpo, "Importar de Spotify", "Mías")
+	_, cuerpo = get(t, beto, urlGrupo+"/importar?de=spotify&playlist=PLmio&t=M%C3%ADas")
+	debeContener(t, cuerpo, "De Spotify", `name="playlist" value="PLmio"`)
+	_, cuerpo = post(t, beto, urlGrupo+"/importar", url.Values{"de": {"spotify"}, "playlist": {"PLmio"}, "v": {"trackA1", "noexiste"}}, false)
+	debeContener(t, cuerpo, "Importación: 1 canción agregada, 1 no se encontró.", "De Spotify")
+	var isrc string
+	e.db.QueryRow(`SELECT isrc FROM canciones WHERE titulo = 'De Spotify'`).Scan(&isrc)
+	if isrc != "US9" {
+		t.Errorf("isrc = %q", isrc)
+	}
 }

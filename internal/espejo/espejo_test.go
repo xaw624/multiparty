@@ -108,7 +108,7 @@ func TestSincronizar(t *testing.T) {
 		t.Fatalf("pendientes antes = %d, quiere 3", plan.Pendientes())
 	}
 
-	res, err := Sincronizar(ctx, st, api, g, ana)
+	res, err := SincronizarYouTube(ctx, st, api, g, ana)
 	debe(t, err)
 	if res != (Resultado{Agregadas: 2, Omitidas: 1}) {
 		t.Errorf("resultado = %+v", res)
@@ -126,7 +126,7 @@ func TestSincronizar(t *testing.T) {
 
 	// Una segunda sincronización no vuelve a buscar la que no se encontró.
 	antes := api.nBusquedas
-	_, err = Sincronizar(ctx, st, api, g, ana)
+	_, err = SincronizarYouTube(ctx, st, api, g, ana)
 	debe(t, err)
 	if api.nBusquedas != antes {
 		t.Error("no debería volver a buscar canciones sin coincidencia")
@@ -134,7 +134,7 @@ func TestSincronizar(t *testing.T) {
 
 	// Al escucharla, sale de la playlist.
 	debe(t, st.MarcarEscuchada(ctx, g, ana, 0))
-	res, err = Sincronizar(ctx, st, api, g, ana)
+	res, err = SincronizarYouTube(ctx, st, api, g, ana)
 	debe(t, err)
 	if res.Quitadas != 1 || fmt.Sprint(api.quitados) != "[item-v1]" {
 		t.Errorf("quitar: res=%+v quitados=%v", res, api.quitados)
@@ -149,13 +149,13 @@ func TestSincronizarSeDetieneSinCuota(t *testing.T) {
 		duraciones: map[string]int{"v2": 180},
 		cuotaEn:    2,
 	}
-	res, err := Sincronizar(ctx, st, api, g, ana)
+	res, err := SincronizarYouTube(ctx, st, api, g, ana)
 	if !errors.Is(err, youtube.ErrCuota) || res.Agregadas != 1 {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
 	// Al día siguiente continúa donde quedó, sin repetir lo ya agregado.
 	api.cuotaEn = 0
-	res, err = Sincronizar(ctx, st, api, g, ana)
+	res, err = SincronizarYouTube(ctx, st, api, g, ana)
 	debe(t, err)
 	if res.Agregadas != 1 || fmt.Sprint(api.agregados) != "[v1 v2]" {
 		t.Errorf("continuación: res=%+v agregados=%v", res, api.agregados)

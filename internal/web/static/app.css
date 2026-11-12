@@ -164,3 +164,7 @@ button.secundario {
 .lista-check li:first-child { border-top: 0; }
 .lista-check label { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; cursor: pointer; }
 .lista-check input { width: auto; }
+
+h3 { font-size: 0.95rem; margin: 0 0 8px; }
+.plataforma { border-top: 1px solid var(--borde); margin-top: 16px; padding-top: 16px; }
+a.etiqueta { text-decoration: none; }

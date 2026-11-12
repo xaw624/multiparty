@@ -18,6 +18,7 @@ import (
 	"github.com/xaw624/multiparty/internal/config"
 	"github.com/xaw624/multiparty/internal/db"
 	"github.com/xaw624/multiparty/internal/resolver"
+	"github.com/xaw624/multiparty/internal/spotify"
 	"github.com/xaw624/multiparty/internal/web"
 	"github.com/xaw624/multiparty/internal/youtube"
 )
@@ -57,12 +58,14 @@ func run(logger *slog.Logger) error {
 		Resolver: resolver.New(cfg.Pais),
 		Secreto:  cfg.Secreto,
 	}
-	if cfg.GoogleHabilitado() {
+	if cfg.GoogleHabilitado() || cfg.SpotifyHabilitado() {
 		caja, err := cifrado.DesdeBase64(cfg.ClaveTokens)
 		if err != nil {
 			return errors.Join(errors.New("MULTIPARTY_CLAVE_TOKENS inválida"), err)
 		}
 		op.Caja = caja
+	}
+	if cfg.GoogleHabilitado() {
 		op.Google = &oauth2.Config{
 			ClientID:     cfg.GoogleClientID,
 			ClientSecret: cfg.GoogleClientSecret,
@@ -73,6 +76,18 @@ func run(logger *slog.Logger) error {
 		logger.Info("YouTube Music habilitado", "redirect", op.Google.RedirectURL)
 	} else {
 		logger.Info("YouTube Music deshabilitado: falta GOOGLE_CLIENT_ID")
+	}
+	if cfg.SpotifyHabilitado() {
+		op.Spotify = &oauth2.Config{
+			ClientID:     cfg.SpotifyClientID,
+			ClientSecret: cfg.SpotifyClientSecret,
+			Endpoint:     endpoints.Spotify,
+			RedirectURL:  cfg.BaseURL + "/cuentas/spotify/callback",
+			Scopes:       spotify.Scopes,
+		}
+		logger.Info("Spotify habilitado", "redirect", op.Spotify.RedirectURL)
+	} else {
+		logger.Info("Spotify deshabilitado: falta SPOTIFY_CLIENT_ID")
 	}
 
 	app, err := web.New(database, logger, op)

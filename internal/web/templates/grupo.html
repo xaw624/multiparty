@@ -26,7 +26,7 @@
       {{range .Ventana}}
       <li>
         {{template "cancion" .}}
-        {{if .SinCoincidencia}}<span class="etiqueta" title="Ábrela con su link">No está en YouTube</span>{{end}}
+        {{if .SinCoincidencia}}<a class="etiqueta" href="/g/{{$.Grupo.Codigo}}/revision" title="Elegir la canción a mano">No está en {{if eq $.Espejo.Plataforma "spotify"}}Spotify{{else}}YouTube{{end}}</a>{{end}}
         <form method="post" action="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}"
               hx-post="/g/{{$.Grupo.Codigo}}/escuchada/{{.Posicion}}" hx-target="#grupo" hx-swap="outerHTML"
               hx-disabled-elt="find button">
@@ -40,7 +40,7 @@
     {{end}}
   </section>
 
-  {{if .GoogleDisponible}}{{template "youtube" .}}{{end}}
+  {{if or .YouTubeDisponible .SpotifyDisponible}}{{template "plataformas" .}}{{end}}
 
   {{if .Despues}}
   <section class="tarjeta">
@@ -96,37 +96,70 @@
 </div>
 {{end}}
 
-{{define "youtube"}}
+{{define "plataformas"}}
+{{$yt := index .Cuentas "youtube"}}{{$sp := index .Cuentas "spotify"}}
 <section class="tarjeta">
-  <h2>Escuchar en YouTube Music</h2>
-  {{if not .CuentaYouTube}}
-  <p class="nota">Conecta tu cuenta para tener tu ventana como playlist en YouTube Music e importar canciones de tus playlists.</p>
-  <a class="boton" href="/cuentas/youtube/conectar?volver=/g/{{.Grupo.Codigo}}">Conectar YouTube</a>
-  {{else}}
-  <p class="nota">Conectado como <strong>{{.CuentaYouTube}}</strong>.</p>
-  {{if and .Espejo (eq .Espejo.Plataforma "youtube")}}
-  <p><a href="{{.Espejo.URL}}" target="_blank" rel="noopener noreferrer">Abrir mi playlist en YouTube Music</a></p>
+  <h2>Escuchar en tu app</h2>
+  {{if .Espejo}}
+  <p>Tu ventana está en tu playlist de <strong>{{if eq .Espejo.Plataforma "spotify"}}Spotify{{else}}YouTube Music{{end}}</strong>.
+    <a href="{{.Espejo.URL}}" target="_blank" rel="noopener noreferrer">Abrir mi playlist</a></p>
   <p class="nota">{{if .Pendientes}}{{.Pendientes}} {{if eq .Pendientes 1}}cambio{{else}}cambios{{end}} por sincronizar.{{else}}Tu playlist está al día.{{end}}
-    Se actualiza cuando marcas «Ya la escuché» o con este botón.</p>
+    {{if eq .Espejo.Plataforma "spotify"}}Se actualiza sola unos minutos después de que escuchas en Spotify, y al marcar «Ya la escuché».{{else}}Se actualiza cuando marcas «Ya la escuché» o con este botón.{{end}}</p>
   <form method="post" action="/g/{{.Grupo.Codigo}}/sincronizar"
         hx-post="/g/{{.Grupo.Codigo}}/sincronizar" hx-target="#grupo" hx-swap="outerHTML" hx-disabled-elt="find button">
     <button type="submit">Sincronizar ahora</button>
   </form>
   {{else}}
-  <p class="nota">Se creará una playlist privada «Multiparty · {{.Grupo.Nombre}}» en tu canal. Multiparty solo agrega y quita canciones de esa playlist cuando tú lo pides: al crearla, al marcar «Ya la escuché» o con «Sincronizar».</p>
-  <form method="post" action="/g/{{.Grupo.Codigo}}/espejo/youtube"
-        hx-post="/g/{{.Grupo.Codigo}}/espejo/youtube" hx-target="#grupo" hx-swap="outerHTML" hx-disabled-elt="find button">
-    <button type="submit">Crear mi playlist</button>
-  </form>
+  <p class="nota">Conecta tu cuenta y crea tu playlist: tu ventana aparecerá en tu app y se irá actualizando.</p>
   {{end}}
-  <p class="acciones">
-    <a href="/g/{{.Grupo.Codigo}}/importar">Importar de mis playlists</a>
-  </p>
-  <form method="post" action="/cuentas/youtube/desconectar"
-        onsubmit="return confirm('¿Desconectar YouTube? Tu playlist seguirá en tu cuenta, pero ya no se actualizará.')">
-    <input type="hidden" name="volver" value="/g/{{.Grupo.Codigo}}">
-    <button type="submit" class="secundario">Desconectar YouTube</button>
-  </form>
+
+  {{if .YouTubeDisponible}}
+  <div class="plataforma">
+    <h3>YouTube Music</h3>
+    {{if $yt}}
+    <p class="nota">Conectado como <strong>{{$yt}}</strong>.</p>
+    {{if not (and .Espejo (eq .Espejo.Plataforma "youtube"))}}
+    <p class="nota">Se creará una playlist privada «Multiparty · {{.Grupo.Nombre}}» en tu canal. Multiparty solo agrega y quita canciones de esa playlist cuando tú lo pides: al crearla, al marcar «Ya la escuché» o con «Sincronizar».{{if .Espejo}} Reemplaza a tu playlist actual, que quedará en tu cuenta sin actualizarse.{{end}}</p>
+    <form method="post" action="/g/{{.Grupo.Codigo}}/espejo/youtube"
+          hx-post="/g/{{.Grupo.Codigo}}/espejo/youtube" hx-target="#grupo" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <button type="submit">Crear mi playlist en YouTube Music</button>
+    </form>
+    {{end}}
+    <p class="acciones"><a href="/g/{{.Grupo.Codigo}}/importar?de=youtube">Importar de mis playlists de YouTube</a></p>
+    <form method="post" action="/cuentas/youtube/desconectar"
+          onsubmit="return confirm('¿Desconectar YouTube? Tu playlist seguirá en tu cuenta, pero ya no se actualizará.')">
+      <input type="hidden" name="volver" value="/g/{{.Grupo.Codigo}}">
+      <button type="submit" class="secundario">Desconectar YouTube</button>
+    </form>
+    {{else}}
+    <a class="boton" href="/cuentas/youtube/conectar?volver=/g/{{.Grupo.Codigo}}">Conectar YouTube</a>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{if .SpotifyDisponible}}
+  <div class="plataforma">
+    <h3>Spotify</h3>
+    {{if $sp}}
+    <p class="nota">Conectado como <strong>{{$sp}}</strong>.</p>
+    {{if not (and .Espejo (eq .Espejo.Plataforma "spotify"))}}
+    <p class="nota">Se creará una playlist privada «Multiparty · {{.Grupo.Nombre}}» en tu cuenta. Multiparty la mantiene igual a tu ventana y detecta lo que escuchas para avanzar sola.{{if .Espejo}} Reemplaza a tu playlist actual, que quedará en tu cuenta sin actualizarse.{{end}}</p>
+    <form method="post" action="/g/{{.Grupo.Codigo}}/espejo/spotify"
+          hx-post="/g/{{.Grupo.Codigo}}/espejo/spotify" hx-target="#grupo" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <button type="submit">Crear mi playlist en Spotify</button>
+    </form>
+    {{end}}
+    <p class="acciones"><a href="/g/{{.Grupo.Codigo}}/importar?de=spotify">Importar de mis playlists de Spotify</a></p>
+    <form method="post" action="/cuentas/spotify/desconectar"
+          onsubmit="return confirm('¿Desconectar Spotify? Tu playlist seguirá en tu cuenta, pero ya no se actualizará.')">
+      <input type="hidden" name="volver" value="/g/{{.Grupo.Codigo}}">
+      <button type="submit" class="secundario">Desconectar Spotify</button>
+    </form>
+    {{else}}
+    <p class="nota">La app de Spotify está en modo desarrollo: tu cuenta debe estar autorizada por quien la administra (máximo 5 personas).</p>
+    <a class="boton" href="/cuentas/spotify/conectar?volver=/g/{{.Grupo.Codigo}}">Conectar Spotify</a>
+    {{end}}
+  </div>
   {{end}}
 </section>
 {{end}}

@@ -37,6 +37,7 @@ type CancionEspejo struct {
 	CancionID       int64
 	Titulo          string
 	Artista         string
+	ISRC            string
 	DuracionS       int
 	TrackID         string // id en la plataforma; vacío si aún no se emparejó
 	SinCoincidencia bool   // ya se buscó y no se encontró
@@ -45,8 +46,17 @@ type CancionEspejo struct {
 // PlanEspejo dice qué cambiar en la playlist para que coincida con la ventana.
 type PlanEspejo struct {
 	Espejo  Espejo
-	Quitar  []ItemPlaylist
-	Agregar []CancionEspejo
+	Ventana []CancionEspejo // toda la ventana, en orden
+	Quitar  []ItemPlaylist  // está en la playlist y ya no debería
+	Agregar []CancionEspejo // falta en la playlist (subconjunto de Ventana)
+}
+
+// Candidato es una posible coincidencia guardada para la revisión manual.
+type Candidato struct {
+	ID      string
+	Titulo  string
+	Detalle string // artista o canal
+	URL     string
 }
 
 // Pendientes cuenta los cambios que una sincronización haría.
@@ -164,19 +174,17 @@ func planEspejoTx(ctx context.Context, tx *sql.Tx, grupoID, usuarioID int64) (Pl
 		return p, err
 	}
 
-	// Lo que falta, en orden de posición para que la playlist quede en orden.
-	var faltan []int
+	// Toda la ventana en orden; lo que falta en la playlist va a Agregar.
+	var posiciones []int
 	for pos := range ventana {
-		if !enPlaylist[pos] {
-			faltan = append(faltan, pos)
-		}
+		posiciones = append(posiciones, pos)
 	}
-	sort.Ints(faltan)
-	for _, pos := range faltan {
+	sort.Ints(posiciones)
+	for _, pos := range posiciones {
 		c := CancionEspejo{Posicion: pos}
 		var trackID sql.NullString
 		err := tx.QueryRowContext(ctx, `
-			SELECT c.id, c.titulo, c.artista, COALESCE(c.duracion_ms, 0) / 1000,
+			SELECT c.id, c.titulo, c.artista, COALESCE(c.isrc, ''), COALESCE(c.duracion_ms, 0) / 1000,
 			       (SELECT track_id FROM mapeos
 			         WHERE cancion_id = c.id AND plataforma IN (?, ?) AND track_id IS NOT NULL
 			         ORDER BY plataforma DESC LIMIT 1),
@@ -187,7 +195,7 @@ func planEspejoTx(ctx context.Context, tx *sql.Tx, grupoID, usuarioID int64) (Pl
 			JOIN canciones c ON c.id = a.cancion_id
 			WHERE o.grupo_id = ? AND o.posicion = ?`,
 			p.Espejo.Plataforma, plataformaMusica(p.Espejo.Plataforma), p.Espejo.Plataforma, grupoID, pos).
-			Scan(&c.CancionID, &c.Titulo, &c.Artista, &c.DuracionS, &trackID, &c.SinCoincidencia)
+			Scan(&c.CancionID, &c.Titulo, &c.Artista, &c.ISRC, &c.DuracionS, &trackID, &c.SinCoincidencia)
 		if err != nil {
 			return p, err
 		}
@@ -195,7 +203,10 @@ func planEspejoTx(ctx context.Context, tx *sql.Tx, grupoID, usuarioID int64) (Pl
 		if c.TrackID != "" {
 			c.SinCoincidencia = false
 		}
-		p.Agregar = append(p.Agregar, c)
+		p.Ventana = append(p.Ventana, c)
+		if !enPlaylist[pos] {
+			p.Agregar = append(p.Agregar, c)
+		}
 	}
 	return p, nil
 }
@@ -217,6 +228,27 @@ func (s *Store) ItemAgregado(ctx context.Context, miembroID int64, posicion int,
 		ON CONFLICT (miembro_id, posicion) DO UPDATE SET item_id_plataforma = excluded.item_id_plataforma`,
 		miembroID, posicion, itemID)
 	return err
+}
+
+// EspejoReemplazado registra que la playlist quedó con exactamente esos
+// elementos (posición → id del elemento), como tras un reemplazo en Spotify.
+func (s *Store) EspejoReemplazado(ctx context.Context, miembroID int64, items map[int]string) error {
+	return s.enTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE ventana_items SET item_id_plataforma = NULL WHERE miembro_id = ?`, miembroID); err != nil {
+			return err
+		}
+		for pos, id := range items {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO ventana_items (miembro_id, posicion, item_id_plataforma, estado)
+				VALUES (?, ?, ?, 'activa')
+				ON CONFLICT (miembro_id, posicion) DO UPDATE SET item_id_plataforma = excluded.item_id_plataforma`,
+				miembroID, pos, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // ItemQuitado registra que la canción de esa posición ya no está en la playlist.
