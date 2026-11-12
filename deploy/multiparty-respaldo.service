@@ -1,0 +1,13 @@
+# /etc/systemd/system/multiparty-respaldo.service
+# Copia diaria de la base; conserva 14 días.
+[Unit]
+Description=Respaldo de la base de Multiparty
+
+[Service]
+Type=oneshot
+User=multiparty
+Group=multiparty
+EnvironmentFile=/etc/multiparty/env
+Environment=MULTIPARTY_DB=/var/lib/multiparty/multiparty.db
+ExecStart=/bin/sh -c '/usr/local/bin/multiparty respaldo /var/lib/multiparty/respaldos/multiparty-$(date +%%F).db'
+ExecStartPost=/usr/bin/find /var/lib/multiparty/respaldos -name 'multiparty-*.db' -mtime +14 -delete

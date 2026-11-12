@@ -100,3 +100,16 @@ func apply(ctx context.Context, database *sql.DB, version, body string) error {
 	}
 	return tx.Commit()
 }
+
+// Respaldar copia la base completa y consistente a destino (que no debe
+// existir), aunque el servidor esté funcionando. Usa VACUUM INTO.
+func Respaldar(ctx context.Context, database *sql.DB, destino string) error {
+	if _, err := os.Stat(destino); err == nil {
+		return fmt.Errorf("el respaldo %s ya existe", destino)
+	}
+	if err := os.MkdirAll(filepath.Dir(destino), 0o750); err != nil {
+		return err
+	}
+	_, err := database.ExecContext(ctx, `VACUUM INTO ?`, destino)
+	return err
+}

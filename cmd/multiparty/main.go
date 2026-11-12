@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,10 +27,39 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	if len(os.Args) == 3 && os.Args[1] == "respaldo" {
+		if err := respaldar(os.Args[2]); err != nil {
+			logger.Error("respaldo fallido", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("respaldo listo", "archivo", os.Args[2])
+		return
+	}
+	if len(os.Args) > 1 {
+		fmt.Fprintln(os.Stderr, "uso: multiparty            (inicia el servidor)")
+		fmt.Fprintln(os.Stderr, "     multiparty respaldo ARCHIVO.db")
+		os.Exit(2)
+	}
 	if err := run(logger); err != nil {
 		logger.Error("fallo fatal", "err", err)
 		os.Exit(1)
 	}
+}
+
+// respaldar copia la base configurada en MULTIPARTY_DB a destino.
+func respaldar(destino string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	database, err := db.Open(cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	return db.Respaldar(ctx, database, destino)
 }
 
 func run(logger *slog.Logger) error {

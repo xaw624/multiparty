@@ -1,0 +1,14 @@
+{
+  "name": "Multiparty",
+  "short_name": "Multiparty",
+  "description": "Playlist compartida: cada quien la escucha en su app.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#141416",
+  "theme_color": "#5b4bdb",
+  "icons": [
+    {"src": "/static/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}

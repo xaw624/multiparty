@@ -1,0 +1,11 @@
+# /etc/systemd/system/multiparty-respaldo.timer
+[Unit]
+Description=Respaldo diario de Multiparty
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

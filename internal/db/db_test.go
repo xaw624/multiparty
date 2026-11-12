@@ -42,3 +42,35 @@ func TestMigrateEsIdempotente(t *testing.T) {
 		t.Error("foreign_keys no está activado")
 	}
 }
+
+func TestRespaldar(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	database, err := Open(filepath.Join(dir, "orig.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := Migrate(ctx, database); err != nil {
+		t.Fatal(err)
+	}
+	database.Exec(`INSERT INTO usuarios (nombre) VALUES ('Ana')`)
+
+	destino := filepath.Join(dir, "respaldos", "copia.db")
+	if err := Respaldar(ctx, database, destino); err != nil {
+		t.Fatal(err)
+	}
+	if err := Respaldar(ctx, database, destino); err == nil {
+		t.Error("no debe sobrescribir un respaldo existente")
+	}
+	copia, err := Open(destino)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copia.Close()
+	var n int
+	copia.QueryRow(`SELECT COUNT(*) FROM usuarios`).Scan(&n)
+	if n != 1 {
+		t.Errorf("usuarios en la copia = %d", n)
+	}
+}

@@ -1,0 +1,6 @@
+# Bloque para tu Caddyfile (HTTPS automático con Let's Encrypt).
+# Cambia el dominio por el tuyo.
+multiparty.tu-dominio.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}

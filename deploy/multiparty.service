@@ -1,0 +1,34 @@
+# /etc/systemd/system/multiparty.service
+[Unit]
+Description=Multiparty: playlist compartida
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=multiparty
+Group=multiparty
+EnvironmentFile=/etc/multiparty/env
+Environment=MULTIPARTY_DB=/var/lib/multiparty/multiparty.db
+Environment=MULTIPARTY_ADDR=127.0.0.1:8080
+ExecStart=/usr/local/bin/multiparty
+Restart=on-failure
+RestartSec=5
+StateDirectory=multiparty
+WorkingDirectory=/var/lib/multiparty
+
+# Endurecimiento: solo puede escribir en /var/lib/multiparty.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

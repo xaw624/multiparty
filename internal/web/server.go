@@ -109,7 +109,13 @@ func (s *Server) Routes() http.Handler {
 	if err != nil {
 		panic(err) // solo falla si cambia la directiva embed
 	}
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	archivos := http.StripPrefix("/static/", http.FileServerFS(static))
+	mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
+		archivos.ServeHTTP(w, r)
+	}))
 
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.inicio)
