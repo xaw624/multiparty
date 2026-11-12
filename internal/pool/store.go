@@ -377,7 +377,7 @@ func guardarEnlaces(ctx context.Context, tx *sql.Tx, cancionID int64, enlaces []
 				url = excluded.url,
 				confianza = excluded.confianza,
 				verificado_en = datetime('now')
-			WHERE mapeos.confianza NOT IN ('directo', 'manual') OR excluded.confianza = 'directo'`,
+			WHERE mapeos.confianza NOT IN ('directo', 'manual') OR excluded.confianza IN ('directo', 'manual')`,
 			cancionID, e.Plataforma, nulo(e.TrackID), e.URL, string(confianza)); err != nil {
 			return err
 		}

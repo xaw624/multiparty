@@ -90,3 +90,14 @@ func esColeccion(seg string) bool {
 	}
 	return false
 }
+
+// Identificar reconoce un link de canción y devuelve su plataforma
+// ("spotify", "youtube", "apple" o "deezer") y su id, sin consultar nada.
+func Identificar(enlace string) (plataforma, id string, err error) {
+	u, err := url.Parse(strings.TrimSpace(enlace))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", "", pool.ErrEnlaceInvalido
+	}
+	o, err := detectar(u)
+	return o.plataforma, o.id, err
+}

@@ -59,6 +59,8 @@ type Vista struct {
 	Espejo *Espejo
 	// Pendientes son los cambios que haría "Sincronizar".
 	Pendientes int
+	// PorRevisar cuenta las canciones del grupo que esperan revisión manual.
+	PorRevisar int
 }
 
 // Vista arma la página del grupo para el usuario. Devuelve ErrNoPermitido si
@@ -118,6 +120,13 @@ func (s *Store) Vista(ctx context.Context, grupoID, usuarioID int64) (Vista, err
 
 		v.Miembros, err = cargarResumen(ctx, tx, grupoID, usuarioID)
 		if err != nil {
+			return err
+		}
+
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM revision WHERE estado = 'abierta' AND cancion_id IN (
+				SELECT cancion_id FROM aportes WHERE grupo_id = ? AND estado != 'eliminado')`,
+			grupoID).Scan(&v.PorRevisar); err != nil {
 			return err
 		}
 

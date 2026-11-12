@@ -211,8 +211,8 @@ revision        (cancion_id, plataforma, candidatos_json, estado, resuelto_por)
 | **F0** ✅ | Repo, plan y esqueleto del proyecto | — |
 | **F1. Núcleo universal** ✅ | Grupos con invitación, pegar link (resolvedor propio), orden intercalado, ventana de 10 por persona en la web con botón "ya la escuché" (nivel 3 para **todas** las plataformas) | Fuentes públicas sin clave |
 | **F2. YouTube Music** ✅ | OAuth de Google, playlist espejo, rotación con botón, importar desde playlists (guía: [GOOGLE.md](GOOGLE.md)) | YouTube Data API |
-| **F3. Spotify** | OAuth, playlist espejo, detección automática de escuchas, búsqueda e importación | Spotify Web API |
-| **F4. Revisión manual** | Pantalla para elegir entre candidatos cuando la coincidencia no es confiable | — |
+| **F3. Spotify** ✅ | OAuth, playlist espejo, detección automática de escuchas, búsqueda e importación (guía: [SPOTIFY.md](SPOTIFY.md)) | Spotify Web API |
+| **F4. Revisión manual** ✅ | Pantalla para elegir entre candidatos, pegar el link correcto o volver a buscar | — |
 | **F5. Versión pública** *(si se decide)* | Anuncios, política de privacidad, consentimiento, verificación de Google, Spotify en nivel 3 | — |
 | Después | Apple Music (nivel 2), reproductor web | MusicKit |
 
@@ -226,7 +226,13 @@ La F1 ya sirve por sí sola: funciona con cualquier plataforma sin conectar ning
 - **Cuota agotada:** la sincronización se detiene y continúa donde quedó la siguiente vez.
 - **Importar:** hasta 50 canciones por vez desde las playlists del usuario; entran al final de su fila. La lista «Me gusta» de YouTube Music no está disponible en la API.
 - **Desconectar:** revoca el permiso en Google y borra los tokens; la playlist queda en la cuenta del usuario.
-- **Pendiente:** resolver por adelantado las canciones que están a 5 posiciones de entrar a una ventana (hoy se buscan al sincronizar), y refrescar cada 30 días los datos obtenidos de YouTube (política III.E.4).
+
+### Implementación en F3 y F4
+
+- **Spotify:** login con PKCE; la playlist espejo se **reemplaza completa** con la ventana en una sola llamada. Emparejamiento por ISRC y, si no, por título, artista y duración (±5 s).
+- **Detección de escuchas** (cada 3 min): lo escuchado en Spotify que esté en la ventana se marca solo y la playlist se actualiza. La primera vez solo se fija el punto de partida.
+- **Tareas de fondo:** pre-emparejar la ventana y las 5 siguientes (máximo 3 búsquedas de YouTube y 10 de Spotify cada 15 min) y verificar cada 30 días los ids de YouTube (se borran los que ya no existen).
+- **Revisión manual:** elegir entre los candidatos guardados, pegar el link correcto (queda con confianza `manual`) o volver a buscar.
 
 ## 12. Decisiones pendientes
 

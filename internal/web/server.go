@@ -27,7 +27,7 @@ import (
 var assets embed.FS
 
 // páginas que se renderizan dentro de layout.html.
-var pages = []string{"index.html", "grupo.html", "unirse.html", "importar.html"}
+var pages = []string{"index.html", "grupo.html", "unirse.html", "importar.html", "revision.html"}
 
 // Resolver convierte un link pegado por el usuario en una canción.
 type Resolver interface {
@@ -127,6 +127,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /cuentas/{plataforma}/desconectar", s.desconectar)
 	mux.HandleFunc("POST /g/{codigo}/espejo/{plataforma}", s.crearEspejo)
 	mux.HandleFunc("POST /g/{codigo}/sincronizar", s.sincronizarHandler)
+	mux.HandleFunc("GET /g/{codigo}/revision", s.revisionVer)
+	mux.HandleFunc("POST /g/{codigo}/revision/{id}", s.revisionResolver)
 	mux.HandleFunc("GET /g/{codigo}/importar", s.importarVer)
 	mux.HandleFunc("POST /g/{codigo}/importar", s.importar)
 

@@ -20,6 +20,7 @@ import (
 
 	"github.com/xaw624/multiparty/internal/cifrado"
 	"github.com/xaw624/multiparty/internal/db"
+	"github.com/xaw624/multiparty/internal/pool"
 	"github.com/xaw624/multiparty/internal/spotify"
 	"github.com/xaw624/multiparty/internal/youtube"
 )
@@ -162,6 +163,8 @@ func nuevoEntornoYouTube(t *testing.T) entornoYouTube {
 		"https://open.spotify.com/track/1":     cancionFalsa("Canción Uno"),
 		"https://music.youtube.com/watch?v=y1": cancionFalsa("Importada Uno"),
 		"https://music.youtube.com/watch?v=y2": cancionFalsa("Canción Uno"),
+		"https://www.deezer.com/track/77": {Titulo: "Rara", Artista: "Nadie",
+			Enlaces: []pool.Enlace{{Plataforma: "deezer", TrackID: "77", URL: "https://www.deezer.com/track/77"}}},
 	}
 	srv, err := New(database, slog.New(slog.NewTextHandler(io.Discard, nil)), Opciones{
 		Resolver: res,
@@ -369,5 +372,49 @@ func TestFlujoSpotify(t *testing.T) {
 	e.db.QueryRow(`SELECT isrc FROM canciones WHERE titulo = 'De Spotify'`).Scan(&isrc)
 	if isrc != "US9" {
 		t.Errorf("isrc = %q", isrc)
+	}
+}
+
+func TestRevisionManual(t *testing.T) {
+	e := nuevoEntornoYouTube(t)
+	ana := cliente(t)
+	resp, _ := post(t, ana, e.app.URL+"/grupos", url.Values{"nombre_grupo": {"Amigos"}, "tu_nombre": {"Ana"}}, false)
+	rutaG := resp.Request.URL.Path
+	urlGrupo := e.app.URL + rutaG
+	post(t, ana, urlGrupo+"/aportes", url.Values{"enlace": {"https://www.deezer.com/track/77"}}, true)
+
+	sinSeguir := *ana
+	sinSeguir.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, _ = get(t, &sinSeguir, e.app.URL+"/cuentas/youtube/conectar?volver="+rutaG)
+	destino, _ := url.Parse(resp.Header.Get("Location"))
+	get(t, ana, e.app.URL+"/cuentas/youtube/callback?code=abc&state="+destino.Query().Get("state"))
+
+	// La búsqueda en YouTube no encuentra «Rara»: queda en revisión.
+	_, cuerpo := post(t, ana, urlGrupo+"/espejo/youtube", nil, true)
+	debeContener(t, cuerpo, "1 canción no está en YouTube", "1 canción por revisar", "No está en YouTube")
+
+	_, cuerpo = get(t, ana, urlGrupo+"/revision")
+	debeContener(t, cuerpo, "Rara", "Canción Uno", `value="v1"`, "Volver a buscar")
+
+	// Un link de otra plataforma no sirve.
+	_, cuerpo = post(t, ana, urlGrupo+"/revision/1", url.Values{"accion": {"link"}, "enlace": {"https://open.spotify.com/track/abc123"}}, false)
+	debeContener(t, cuerpo, "Pega un link de una canción de YouTube")
+	// Un id que no está entre los candidatos tampoco.
+	_, cuerpo = post(t, ana, urlGrupo+"/revision/1", url.Values{"accion": {"elegir"}, "track": {"inventado"}}, false)
+	debeContener(t, cuerpo, "Elige una opción")
+
+	_, cuerpo = post(t, ana, urlGrupo+"/revision/1", url.Values{"accion": {"link"}, "enlace": {"https://youtu.be/correcto1"}}, false)
+	debeContener(t, cuerpo, "Listo: «Rara»", "No hay nada por revisar")
+
+	// La siguiente sincronización la agrega con el id elegido a mano.
+	_, cuerpo = post(t, ana, urlGrupo+"/sincronizar", nil, true)
+	debeContener(t, cuerpo, "Playlist actualizada: 1 agregada")
+	if fmt.Sprint(e.google.agregados) != "[correcto1]" {
+		t.Errorf("agregados = %v", e.google.agregados)
+	}
+	var conf string
+	e.db.QueryRow(`SELECT confianza FROM mapeos WHERE plataforma = 'youtubeMusic'`).Scan(&conf)
+	if conf != "manual" {
+		t.Errorf("confianza = %q", conf)
 	}
 }

@@ -1,0 +1,44 @@
+{{define "title"}}Revisar · {{.Grupo.Nombre}} · Multiparty{{end}}
+
+{{define "content"}}
+<div class="pila">
+<section class="tarjeta">
+  <p><a href="/g/{{.Grupo.Codigo}}">← Volver a {{.Grupo.Nombre}}</a></p>
+  <h1>Canciones por revisar</h1>
+  <p class="nota">No se encontró una coincidencia segura en la plataforma. Elige la correcta, pega su link o pide que se vuelva a buscar. Mientras tanto, se abre con su link.</p>
+  {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+  {{with .Mensaje}}<p class="ok" role="status">{{.}}</p>{{end}}
+  {{if not .Revisiones}}<p class="nota">No hay nada por revisar.</p>{{end}}
+</section>
+
+{{range .Revisiones}}
+<section class="tarjeta">
+  <h2>{{.Titulo}} <span class="nota">· {{.Artista}}</span></h2>
+  <p class="nota">No se encontró en {{index $.Nombres .Plataforma}}.</p>
+  {{if .Candidatos}}
+  <form method="post" action="/g/{{$.Grupo.Codigo}}/revision/{{.ID}}" class="formulario">
+    <input type="hidden" name="accion" value="elegir">
+    <ul class="lista-check">
+      {{range .Candidatos}}
+      <li><label><input type="radio" name="track" value="{{.ID}}" required>
+        <span>{{.Titulo}} <span class="nota">· {{.Detalle}}</span>
+        {{with .URL}}<a href="{{.}}" target="_blank" rel="noopener noreferrer">escuchar</a>{{end}}</span></label></li>
+      {{end}}
+    </ul>
+    <button type="submit">Es esta</button>
+  </form>
+  {{end}}
+  <form method="post" action="/g/{{$.Grupo.Codigo}}/revision/{{.ID}}" class="fila-form">
+    <input type="hidden" name="accion" value="link">
+    <input type="url" name="enlace" required placeholder="Link correcto de {{index $.Nombres .Plataforma}}"
+           aria-label="Link correcto de {{index $.Nombres .Plataforma}}">
+    <button type="submit">Usar este link</button>
+  </form>
+  <form method="post" action="/g/{{$.Grupo.Codigo}}/revision/{{.ID}}">
+    <input type="hidden" name="accion" value="reintentar">
+    <button type="submit" class="secundario">Volver a buscar</button>
+  </form>
+</section>
+{{end}}
+</div>
+{{end}}

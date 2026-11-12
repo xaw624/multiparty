@@ -72,6 +72,7 @@
 
   <section class="tarjeta">
     <h2>Grupo</h2>
+    {{if .PorRevisar}}<p><a href="/g/{{.Grupo.Codigo}}/revision">{{.PorRevisar}} {{if eq .PorRevisar 1}}canción por revisar{{else}}canciones por revisar{{end}}</a></p>{{end}}
     <ul class="miembros">
       {{range .Miembros}}
       <li>{{.Nombre}}{{if .EsYo}} (tú){{end}}
